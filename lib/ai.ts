@@ -4,7 +4,7 @@ import type { Answers, Evidence } from "./types";
 import type { Extraction } from "./extract";
 import { AI_ALLOWED } from "./demo";
 
-const MODEL = process.env.OPENAI_MODEL || "gpt-6-luna";
+const MODEL = process.env.OPENAI_MODEL?.trim() || "gpt-6-luna";
 const OPENAI_ENABLED = AI_ALLOWED && Boolean(process.env.OPENAI_API_KEY);
 
 export function aiEnabled(): boolean {
