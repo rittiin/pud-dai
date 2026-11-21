@@ -2,3 +2,4 @@ node_modules
 .next
 data/cases.json
 .env*
+pud-dai.zip

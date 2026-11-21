@@ -42,3 +42,4 @@ next-env.d.ts
 data/cases.json
 .env*.local
 !.env.example
+pud-dai.zip
