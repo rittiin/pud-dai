@@ -1,7 +1,7 @@
 // Screening questions, adapted from the DDC SARI_AI 2 form into plain language.
 // The chat asks only what is still missing, so anything the person already said in free text is skipped.
 import type { AnswerKey, Answers, Chronic, RedFlag, Sym } from "../types";
-import { CHRONIC_LABEL, RED_FLAG_LABEL, SYM_LABEL } from "./knowledge";
+import { CHILD_FLAGS, CHRONIC_LABEL, RED_FLAG_LABEL, SYM_LABEL } from "./knowledge";
 
 export interface Option {
   label: string;
@@ -14,7 +14,7 @@ export interface Question {
   kind: "single" | "multi" | "date" | "number" | "text";
   prompt: (a: Answers) => string;
   hint?: string;
-  options?: Option[];
+  options?: Option[] | ((a: Answers) => Option[]);
   optional?: boolean;
   ask: (a: Answers) => boolean;
   formRef: string; // which part of the SARI_AI 2 form this question fills
@@ -36,7 +36,7 @@ export const QUESTIONS: Question[] = [
     kind: "single",
     formRef: "PDPA",
     prompt: () =>
-      "สวัสดีครับ ผมชื่อน้องพูดได้ ต้นแบบคัดกรอง 3 โรค: ไข้หวัดใหญ่ อุจจาระร่วงเฉียบพลัน และอาหารเป็นพิษ\n\nระบบเดโมสาธารณะปิดการเรียก AI ภายนอกและไม่บันทึกรายงาน อย่ากรอกชื่อ เลขบัตร หรือข้อมูลที่ระบุตัวบุคคลได้ หากนำระบบไปเปิดใช้งานจริง ผู้ดูแลต้องแจ้งวัตถุประสงค์ ระยะเวลาเก็บข้อมูล และผู้ให้บริการที่ประมวลผลก่อนขอความยินยอม\n\nคำศัพท์ภาษาถิ่นจะไม่ถูกเก็บจากบทสนทนา หากต้องการส่งคำเสนอให้ตรวจ จะถามความยินยอมแยกต่างหากครับ\n\nยินยอมให้ใช้คำตอบเพื่อการคัดกรองในเดโมไหมครับ?",
+      "สวัสดีครับ ผมชื่อน้องพูดได้ ต้นแบบคัดกรอง 3 กลุ่มอาการ: ไข้หวัดใหญ่ อุจจาระร่วงเฉียบพลัน และอาหารเป็นพิษ\n\nก่อนเริ่ม คุณเลือกได้แยกกันว่าจะให้ระบบคำนวณผลคัดกรอง ส่งข้อความอาการไปยัง AI ภายนอก หรือบันทึกรายงาน (ถ้าระบบเปิดให้บันทึก) โปรดใช้ข้อมูลสมมติในเดโม และอย่ากรอกชื่อ เลขบัตร หรือข้อมูลที่ระบุตัวบุคคลได้\n\nคำศัพท์ภาษาถิ่นจะไม่ถูกเก็บจากบทสนทนา หากต้องการส่งคำเสนอให้ตรวจ จะถามความยินยอมแยกต่างหากครับ",
     options: [
       { label: "ยินยอม เริ่มเลย", value: true },
       { label: "ไม่ยินยอม", value: false },
@@ -65,6 +65,30 @@ export const QUESTIONS: Question[] = [
       : "ตอนนี้หรือช่วงที่ป่วย มีอาการอะไรบ้างครับ (เลือกได้หลายข้อ)",
     options: [...symOrder.map((s) => ({ label: SYM_LABEL[s], value: s })), { label: "ไม่มีอาการเหล่านี้", value: "__none", exclusive: true }],
     ask: (a) => a.consent === true,
+  },
+  {
+    key: "age",
+    kind: "number",
+    formRef: "1. ข้อมูลทั่วไป: อายุ",
+    prompt: () => "ผู้ป่วยอายุเท่าไหร่ครับ? กรอกเป็นปี เช่น 34; ถ้าอายุต่ำกว่า 1 ปี ให้กรอกเป็นเดือน เช่น 2 เดือน",
+    hint: "อายุเป็นปี หรือจำนวนเดือนถ้าอายุต่ำกว่า 1 ปี",
+    ask: sick,
+  },
+  {
+    key: "redFlags",
+    kind: "multi",
+    formRef: "สัญญาณอันตราย",
+    prompt: (a) => a.age !== undefined && a.age < 18
+      ? a.age < 0.25
+        ? "มีอาการอันตรายเหล่านี้ไหมครับ? ถ้าทารกอายุต่ำกว่า 3 เดือนมีไข้ ควรไปพบแพทย์ทันที"
+        : "มีอาการอันตรายเหล่านี้ไหมครับ? สำหรับเด็กให้สังเกตการหายใจ ซี่โครงบุ๋ม ปัสสาวะ และการตอบสนองด้วย ข้อนี้สำคัญมาก"
+      : "มีอาการต่อไปนี้ไหมครับ ข้อนี้สำคัญมาก",
+    options: (a) => {
+      const childFlags = CHILD_FLAGS.filter((f) => f !== "infant_fever" || (a.age !== undefined && a.age < 0.25));
+      const applicable = [...flagOrder, ...(a.age !== undefined && a.age < 18 ? childFlags : [])];
+      return [...applicable.map((f) => ({ label: RED_FLAG_LABEL[f], value: f })), { label: "ไม่มีเลย", value: "__none", exclusive: true }];
+    },
+    ask: (a) => sick(a) && a.status !== "recovered",
   },
   {
     key: "stoolCount",
@@ -99,22 +123,6 @@ export const QUESTIONS: Question[] = [
       { label: "ดีขึ้นแล้ว", value: "better" },
       { label: "หายแล้ว", value: "recovered" },
     ],
-    ask: sick,
-  },
-  {
-    key: "redFlags",
-    kind: "multi",
-    formRef: "สัญญาณอันตราย",
-    prompt: () => "มีอาการต่อไปนี้ไหมครับ ข้อนี้สำคัญมาก",
-    options: [...flagOrder.map((f) => ({ label: RED_FLAG_LABEL[f], value: f })), { label: "ไม่มีเลย", value: "__none", exclusive: true }],
-    ask: (a) => sick(a) && a.status !== "recovered",
-  },
-  {
-    key: "age",
-    kind: "number",
-    formRef: "1. ข้อมูลทั่วไป: อายุ",
-    prompt: () => "ผู้ป่วยอายุเท่าไหร่ครับ (ถ้าตอบแทนคนอื่น เช่น ลูกหรือพ่อแม่ ให้ใส่อายุของผู้ป่วย)",
-    hint: "พิมพ์ตัวเลข เช่น 34",
     ask: sick,
   },
   {
@@ -273,6 +281,10 @@ export function nextQuestion(a: Answers): Question | null {
     if (a[q.key] === undefined && q.ask(a)) return q;
   }
   return null;
+}
+
+export function questionOptions(q: Question, a: Answers): Option[] {
+  return typeof q.options === "function" ? q.options(a) : q.options ?? [];
 }
 
 export function progress(a: Answers): { done: number; total: number } {

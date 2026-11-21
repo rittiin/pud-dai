@@ -22,7 +22,13 @@ export type RedFlag =
   | "seizure"
   | "worse_again"
   | "high_fever_3d"
-  | "severe_dehydration";
+  | "severe_dehydration"
+  | "child_fast_breathing"
+  | "child_ribs"
+  | "child_no_urine"
+  | "child_not_alert"
+  | "child_severe_muscle_pain"
+  | "infant_fever";
 
 export type Chronic =
   | "lung"

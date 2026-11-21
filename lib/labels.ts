@@ -49,7 +49,7 @@ export function describe<K extends AnswerKey>(key: K, v: Answers[K]): string {
     case "feverTemp":
       return `${v} °C`;
     case "age":
-      return `${v} ปี`;
+      return Number(v) < 1 ? `${Math.round(Number(v) * 12)} เดือน` : `${v} ปี`;
     case "sex":
       return v === "M" ? "ชาย" : "หญิง";
     case "status":

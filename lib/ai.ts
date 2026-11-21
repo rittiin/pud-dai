@@ -61,8 +61,8 @@ field ที่อนุญาต (ใส่เฉพาะที่มีหล
 - feverTemp: number (องศาเซลเซียส)
 - onsetDate: "YYYY-MM-DD" (คำนวณจากวันนี้ที่ให้มา เช่น "เมื่อวาน")
 - status: "sick" | "better" | "recovered"
-- redFlags: array ของ "dyspnea","chest_pain","confusion","cyanosis","cannot_drink","seizure","worse_again","high_fever_3d","severe_dehydration"
-- age: number (ปี ของผู้ป่วย ถ้าผู้พิมพ์ตอบแทนคนอื่น ให้ใช้อายุผู้ป่วย)
+- redFlags: array ของ "dyspnea","chest_pain","confusion","cyanosis","cannot_drink","seizure","worse_again","high_fever_3d","severe_dehydration","child_fast_breathing","child_ribs","child_no_urine","child_not_alert","child_severe_muscle_pain","infant_fever"
+- age: number (อายุเป็นปี; ถ้าระบุเป็นเดือนให้แปลงเป็นเศษส่วนของปี เช่น 2 เดือน = 0.167; ถ้าผู้พิมพ์ตอบแทนคนอื่นให้ใช้อายุผู้ป่วย)
 - sex: "M" | "F"
 - pregnant: boolean
 - chronic: array ของ "lung","heart","kidney","liver","diabetes","immuno","cancer","obesity","neuro" (ใช้ [] ถ้าบอกว่าไม่มีโรคประจำตัว)

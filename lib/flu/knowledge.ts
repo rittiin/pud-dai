@@ -19,6 +19,10 @@ export const SOURCES = {
     label: "ไข้หวัดใหญ่สายพันธุ์ใหม่ชนิด A กรมควบคุมโรค",
     url: "https://ddc.moph.go.th/disease_detail.php?d=20",
   },
+  childEmergency: {
+    label: "CDC: Emergency Warning Signs of Flu in Children",
+    url: "https://www.cdc.gov/flu/signs-symptoms/index.html",
+  },
 } as const;
 
 export const CASE_DEFINITION = {
@@ -93,6 +97,12 @@ export const RED_FLAG_LABEL: Record<RedFlag, string> = {
   worse_again: "อาการดีขึ้นแล้วกลับแย่ลงใหม่ ไข้กลับมา ไอหนักขึ้น",
   high_fever_3d: "ไข้สูงไม่ลดเกิน 3 วัน",
   severe_dehydration: "มีอาการขาดน้ำรุนแรง เช่น ซึมมาก ปากแห้งมาก ปัสสาวะน้อยมาก",
+  child_fast_breathing: "เด็กหายใจเร็วหรือหายใจลำบาก",
+  child_ribs: "เด็กมีซี่โครงบุ๋มเวลาหายใจ",
+  child_no_urine: "เด็กไม่ปัสสาวะ 8 ชั่วโมง ปากแห้ง หรือร้องไห้ไม่มีน้ำตา",
+  child_not_alert: "เด็กไม่ค่อยรู้สึกตัวหรือไม่ตอบสนองตามปกติ",
+  child_severe_muscle_pain: "เด็กปวดกล้ามเนื้อรุนแรงหรือไม่ยอมเดิน",
+  infant_fever: "ทารกอายุต่ำกว่า 3 เดือนมีไข้",
 };
 
 /** Outbreak-investigation thresholds from section 5.2 of each case definition. */
@@ -102,11 +112,12 @@ export const OUTBREAK_RULE: Partial<Record<keyof typeof DISEASE_CATALOG, { min: 
 };
 
 /** Which danger signs to show for each kind of illness. */
+export const CHILD_FLAGS: RedFlag[] = ["child_fast_breathing", "child_ribs", "child_no_urine", "child_not_alert", "child_severe_muscle_pain", "infant_fever"];
 export const RESP_FLAGS: RedFlag[] = ["dyspnea", "chest_pain", "confusion", "cyanosis", "seizure", "cannot_drink", "worse_again", "high_fever_3d"];
 export const GI_FLAGS: RedFlag[] = ["severe_dehydration", "cannot_drink", "confusion", "seizure", "high_fever_3d"];
 
 /** Red flags requiring emergency care right away (vs. "see a doctor today"). */
-export const EMERGENCY_FLAGS: RedFlag[] = ["dyspnea", "chest_pain", "confusion", "cyanosis", "seizure", "cannot_drink", "severe_dehydration"];
+export const EMERGENCY_FLAGS: RedFlag[] = ["dyspnea", "chest_pain", "confusion", "cyanosis", "seizure", "cannot_drink", "severe_dehydration", ...CHILD_FLAGS.filter((f) => f !== "infant_fever")];
 
 export const CHRONIC_LABEL: Record<Chronic, string> = {
   lung: "โรคปอดเรื้อรัง/หอบหืด",

@@ -51,6 +51,12 @@ const FLAG_RX: [RedFlag, RegExp][] = [
   ["cyanosis", /ปากเขียว|ตัวเขียว|ปลายมือเขียว/],
   ["cannot_drink", /กินไม่ได้|ดื่มน้ำไม่ได้|กินข้าวไม่ได้/],
   ["severe_dehydration", /ปากแห้งมาก|ปัสสาวะ(น้อยมาก|ไม่ออก)|ซึมมาก.{0,5}(ขาดน้ำ|ถ่าย)|ขาดน้ำรุนแรง/],
+  ["child_fast_breathing", /เด็ก.{0,12}(หายใจเร็ว|หายใจลำบาก)|หายใจเร็ว.{0,8}เด็ก/],
+  ["child_ribs", /ซี่โครงบุ๋ม|ชายโครงบุ๋ม/],
+  ["child_no_urine", /เด็ก.{0,15}(ไม่ปัสสาวะ|ไม่มีปัสสาวะ|ปากแห้ง|ไม่มีน้ำตา)|ไม่ปัสสาวะ.{0,8}8\s*ชั่วโมง/],
+  ["child_not_alert", /เด็ก.{0,12}(ไม่รู้สึกตัว|ไม่ตอบสนอง|ซึม)|ไม่ค่อยรู้สึกตัว/],
+  ["child_severe_muscle_pain", /เด็ก.{0,12}(ปวดกล้ามเนื้อรุนแรง|ไม่ยอมเดิน)|ไม่ยอมเดิน/],
+  ["infant_fever", /ทารก.{0,15}(มีไข้|ตัวร้อน)|เด็กอายุต่ำกว่า\s*3\s*เดือน.{0,10}ไข้/],
   ["seizure", /ชัก/],
 ];
 
@@ -117,7 +123,7 @@ export function keywordExtract(text: string, today = todayISO()): Extraction {
   const flags: RedFlag[] = [];
   let flagM: RegExpMatchArray | null = null;
   for (const [f, rx] of FLAG_RX) {
-    const m = t.match(rx);
+    const m = findAffirmedMatch(t, rx);
     if (m) {
       flags.push(f);
       flagM ??= m;
@@ -142,7 +148,7 @@ export function keywordExtract(text: string, today = todayISO()): Extraction {
     const n = parseInt(m[1]);
     if (n > 0 && n < 120) set("age", n, m);
   } else if ((m = t.match(/(\d{1,2})\s*เดือน/)) && /ลูก|เด็ก|ทารก/.test(t)) {
-    set("age", 0, m);
+    set("age", parseInt(m[1]) / 12, m);
   }
 
   if ((m = t.match(/ตั้งครรภ์|ตั้งท้อง|กำลังท้อง/))) set("pregnant", true, m);
@@ -209,7 +215,8 @@ export function postCheck(text: string, answers: Partial<Answers>, evidence: Evi
     if (typeof v !== "number") continue;
     const q = evidence[k]?.quote ?? "";
     const digits = String(v).split(".")[0];
-    if (!q.includes(digits) && !(k === "age" && v === 0 && /เดือน/.test(q))) drop(k, "ไม่มีตัวเลขในข้อความ");
+    const ageInMonths = k === "age" && typeof v === "number" && v > 0 && v < 1 && /\d{1,2}\s*เดือน/.test(q);
+    if (!q.includes(digits) && !(k === "age" && v === 0 && /เดือน/.test(q)) && !ageInMonths) drop(k, "ไม่มีตัวเลขในข้อความ");
   }
 
   // 2) Someone else is also sick and the age/sex sits next to a relative word → it may be theirs, not the patient's.

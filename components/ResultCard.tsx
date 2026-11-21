@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { Answers, Assessment } from "@/lib/types";
-import { ADVICE, CASE_DEFINITION, DISEASE_CATALOG, DISEASE_SOURCES, GI_FLAGS, RED_FLAG_LABEL, RESP_FLAGS, SOURCES } from "@/lib/flu/knowledge";
+import { ADVICE, CASE_DEFINITION, CHILD_FLAGS, DISEASE_CATALOG, DISEASE_SOURCES, GI_FLAGS, RED_FLAG_LABEL, RESP_FLAGS, SOURCES } from "@/lib/flu/knowledge";
 import { CLASS_LABEL, thaiDate, todayISO } from "@/lib/flu/rules";
 import Mascot, { type Mood } from "./Mascot";
 import CareFinder from "./CareFinder";
@@ -29,6 +29,11 @@ function headline(a: Assessment, ans: Answers): { title: string; body: string } 
           : "คุณมีสัญญาณอันตรายที่อาจเป็นภาวะแทรกซ้อนรุนแรง อย่ารอดูอาการที่บ้าน ระหว่างเดินทางให้สวมหน้ากาก",
       };
     case "urgent": {
+      if ((ans.redFlags ?? []).includes("infant_fever"))
+        return {
+          title: "ทารกอายุต่ำกว่า 3 เดือนมีไข้ ควรพบแพทย์ทันที",
+          body: "พาทารกไปสถานพยาบาลทันทีเพื่อให้บุคลากรทางการแพทย์ประเมิน ไม่ควรรอดูอาการจากผลคัดกรองนี้",
+        };
       if (ans.poultry)
         return {
           title: "ควรไปพบแพทย์วันนี้",
@@ -124,7 +129,13 @@ export default function ResultCard({
         ? ADVICE.selfCare
         : ADVICE.selfCare.filter((item) => !item.includes("ไข้หวัดใหญ่"));
   const respiratory = (answers.symptoms ?? []).some((s) => ["fever", "cough", "sore_throat", "runny_nose", "sputum"].includes(s));
-  const warnFlags = gastrointestinal && !respiratory ? GI_FLAGS : gastrointestinal ? [...new Set([...RESP_FLAGS, ...GI_FLAGS])] : RESP_FLAGS;
+  const childFlags = (answers.age ?? 18) < 18
+    ? CHILD_FLAGS.filter((f) => f !== "infant_fever" || (answers.age ?? 18) < 0.25)
+    : [];
+  const warnFlags = [...new Set([
+    ...(gastrointestinal && !respiratory ? GI_FLAGS : gastrointestinal ? [...RESP_FLAGS, ...GI_FLAGS] : RESP_FLAGS),
+    ...childFlags,
+  ])];
 
   const sections: { id: string; title: string; items: string[] }[] = [
     ...(a.urgency === "recovered"

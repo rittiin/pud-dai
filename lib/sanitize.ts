@@ -2,7 +2,7 @@
 import type { Answers } from "./types";
 
 const SYMS = ["fever", "cough", "sore_throat", "runny_nose", "myalgia", "headache", "fatigue", "chills", "sputum", "diarrhea", "vomiting", "abdominal_pain", "bloody_stool"];
-const FLAGS = ["dyspnea", "chest_pain", "confusion", "cyanosis", "cannot_drink", "seizure", "worse_again", "high_fever_3d", "severe_dehydration"];
+const FLAGS = ["dyspnea", "chest_pain", "confusion", "cyanosis", "cannot_drink", "seizure", "worse_again", "high_fever_3d", "severe_dehydration", "child_fast_breathing", "child_ribs", "child_no_urine", "child_not_alert", "child_severe_muscle_pain", "infant_fever"];
 const CHRONIC = ["lung", "heart", "kidney", "liver", "diabetes", "immuno", "cancer", "obesity", "neuro"];
 
 const arr = (v: unknown, allowed: string[]) =>

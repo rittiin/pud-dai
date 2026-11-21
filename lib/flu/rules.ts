@@ -93,6 +93,7 @@ export function assess(a: Answers, today = todayISO()): Assessment {
   let urgency: Urgency = "selfcare";
   if (flags.some((f) => EMERGENCY_FLAGS.includes(f))) urgency = "emergency";
   else if (a.status === "recovered") urgency = "recovered";
+  else if (flags.includes("infant_fever")) urgency = "urgent";
   else if (a.poultry && respiratory) urgency = "urgent";
   else if (highRisk.length && respiratory) urgency = "urgent";
   else if (flags.length) urgency = "soon";

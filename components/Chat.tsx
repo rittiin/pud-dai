@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { AnswerKey, Answers, Assessment, ChatTurn, Evidence, EvidenceItem } from "@/lib/types";
-import { nextQuestion, progress, type Question } from "@/lib/flu/questions";
+import { nextQuestion, progress, questionOptions, type Question } from "@/lib/flu/questions";
 import { addDays, todayISO } from "@/lib/flu/rules";
 import { describe, FIELD_LABEL } from "@/lib/labels";
 import ResultCard from "./ResultCard";
@@ -292,7 +292,15 @@ export default function Chat({ publicDemo, openAiVoiceAvailable, aiAvailable }: 
 
     if (stage === "qa" && q && (q.kind === "text" || q.kind === "number")) {
       if (q.kind === "number") {
-        const n = parseInt(text.replace(/[^\d]/g, ""));
+        const ageValue = q.key === "age"
+          ? (() => {
+              const match = text.match(/(\d+(?:[.,]\d+)?)\s*(เดือน|ปี|ขวบ)?/);
+              if (!match) return NaN;
+              const value = Number(match[1].replace(",", "."));
+              return match[2] === "เดือน" ? value / 12 : value;
+            })()
+          : Number.parseInt(text.replace(/[^\d]/g, ""), 10);
+        const n = ageValue;
         const max = q.key === "age" ? 120 : 100;
         if (!isNaN(n) && n >= 0 && n < max) {
           await advance({ ...answers, [q.key]: n } as Answers, { ...evidence, [q.key]: { quote: text, via: "text" } });
@@ -454,7 +462,7 @@ export default function Chat({ publicDemo, openAiVoiceAvailable, aiAvailable }: 
         <div key={q.key} className="rise max-h-[45dvh] overflow-y-auto border-t border-line bg-surface px-4 pb-2 pt-3">
           {q.kind === "single" && (
             <div className="stagger flex flex-wrap gap-2">
-              {q.options!.map((o) => (
+              {questionOptions(q, answers).map((o) => (
                 <Chip key={o.label} onClick={() => answerCurrent(o.value, o.label)}>
                   {o.label}
                 </Chip>
@@ -464,7 +472,7 @@ export default function Chat({ publicDemo, openAiVoiceAvailable, aiAvailable }: 
           {q.kind === "multi" && (
             <div>
               <div className="stagger flex flex-wrap gap-2">
-                {q.options!.map((o) => {
+                {questionOptions(q, answers).map((o) => {
                   const v = String(o.value);
                   const on = multi.includes(v);
                   return (
@@ -492,7 +500,7 @@ export default function Chat({ publicDemo, openAiVoiceAvailable, aiAvailable }: 
                 disabled={!multi.length}
                 onClick={() => {
                   const vals = multi.filter((x) => x !== "__none");
-                  const label = q.options!.filter((o) => multi.includes(String(o.value))).map((o) => o.label).join(", ");
+                  const label = questionOptions(q, answers).filter((o) => multi.includes(String(o.value))).map((o) => o.label).join(", ");
                   answerCurrent(vals, label);
                 }}
                 className="press mt-3 w-full rounded-2xl bg-brand py-3.5 text-base font-semibold text-white disabled:opacity-40"
@@ -641,7 +649,7 @@ function Welcome({
         </p>
         <ConsentCheck checked={processing} onChange={setProcessing} title="จำเป็น: ใช้คำตอบคำนวณผลคัดกรอง" detail="ไม่รวมการบันทึกหรือส่งให้ AI" />
         <ConsentCheck checked={store} onChange={setStore} disabled={publicDemo} title="บันทึกรายงานให้เจ้าหน้าที่" detail={publicDemo ? "ปิดในเว็บเดโม" : "เก็บคำตอบและบทสนทนาไว้บนแดชบอร์ด"} />
-        <ConsentCheck checked={ai} onChange={setAi} disabled={!aiAvailable} title="ให้ AI ช่วยอ่านอาการ" detail={aiAvailable ? "ส่งข้อความอาการไปยังผู้ให้บริการ AI ถ้าไม่เลือกจะใช้การจับคำออฟไลน์" : "ยังไม่พร้อม ใช้การจับคำออฟไลน์แทน"} />
+        <ConsentCheck checked={ai} onChange={setAi} disabled={!aiAvailable} title="ให้ AI ช่วยอ่านอาการ" detail={aiAvailable ? "ส่งข้อความอาการที่พิมพ์ไปยัง OpenAI เพื่อช่วยแยกข้อมูล ถ้าไม่เลือกจะใช้การจับคำออฟไลน์" : "ยังไม่พร้อม ใช้การจับคำออฟไลน์แทน"} />
         <ConsentCheck
           checked={openAiVoice}
           onChange={setOpenAiVoice}
