@@ -648,7 +648,7 @@ function Welcome({
           detail={openAiVoiceAvailable ? "เมื่อกดปุ่มเสียง ระบบจะส่งเฉพาะข้อความที่ขอให้อ่านไปยัง OpenAI API เพื่อสร้างเสียง AI ไม่ใช่เสียงมนุษย์" : "ปิดในเว็บเดโมสาธารณะหรือเมื่อเซิร์ฟเวอร์ยังไม่มี OPENAI_API_KEY; ใช้เสียงจากอุปกรณ์แทนได้"}
         />
         <ConsentCheck checked={microphone} onChange={setMicrophone} title="ตัวเลือก: ใช้ไมโครโฟนแปลงเสียงเป็นข้อความ" detail="จะไม่เริ่มฟังจนกว่าคุณกดยอมรับด้านล่างและกดปุ่มไมค์เอง เสียงอาจถูกประมวลผลโดยเบราว์เซอร์หรือผู้ให้บริการของเบราว์เซอร์" />
-        {publicDemo && <p className="rounded-lg bg-blue-soft px-3 py-2 text-xs leading-relaxed text-ink-2">เว็บเดโมนี้ไม่บันทึกคำตอบและปิด AI ภายนอก ใช้ข้อมูลสมมติเท่านั้น · แดชบอร์ดแสดงข้อมูลตัวอย่าง</p>}
+        {publicDemo && <p className="rounded-lg bg-blue-soft px-3 py-2 text-xs leading-relaxed text-ink-2">เว็บเดโมนี้ไม่บันทึกคำตอบและปิด AI วิเคราะห์อาการ ใช้ข้อมูลสมมติเท่านั้น · เสียง OpenAI จะส่งเฉพาะข้อความที่กดอ่านเมื่อยินยอม</p>}
         <button onClick={() => begin(true)} disabled={!processing} className="press w-full rounded-2xl bg-brand py-3.5 text-lg font-semibold text-white shadow-md shadow-brand/20 disabled:cursor-not-allowed disabled:opacity-40">
           ยินยอมและเริ่มประเมิน
         </button>

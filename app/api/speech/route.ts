@@ -4,18 +4,33 @@ import { PUBLIC_DEMO_MODE } from "@/lib/demo";
 
 export const dynamic = "force-dynamic";
 
+const publicVoiceAllowed = () => !PUBLIC_DEMO_MODE || process.env.ALLOW_PUBLIC_OPENAI_TTS === "1";
+const canUseOpenAiVoice = () => publicVoiceAllowed() && Boolean(process.env.OPENAI_API_KEY);
+const perIpRequests = new Map<string, { startedAt: number; count: number }>();
+
 export async function GET() {
-  return NextResponse.json({ available: !PUBLIC_DEMO_MODE && Boolean(process.env.OPENAI_API_KEY) });
+  return NextResponse.json({ available: canUseOpenAiVoice() }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(req: Request) {
-  if (PUBLIC_DEMO_MODE) return NextResponse.json({ error: "voice_unavailable" }, { status: 403 });
-  if (!process.env.OPENAI_API_KEY) return NextResponse.json({ error: "voice_unavailable" }, { status: 503 });
+  if (!canUseOpenAiVoice()) return NextResponse.json({ error: "voice_unavailable" }, { status: 403 });
 
   const body = (await req.json().catch(() => null)) as { text?: unknown; consent?: unknown } | null;
   const text = typeof body?.text === "string" ? body.text.trim() : "";
   if (body?.consent !== true || !text || text.length > 1200) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+  }
+
+  const ip = req.headers.get("x-real-ip") || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const now = Date.now();
+  const recent = perIpRequests.get(ip);
+  if (recent && now - recent.startedAt < 60_000 && recent.count >= 30) {
+    return NextResponse.json({ error: "rate_limited" }, { status: 429, headers: { "Retry-After": "60" } });
+  }
+  if (!recent || now - recent.startedAt >= 60_000) perIpRequests.set(ip, { startedAt: now, count: 1 });
+  else perIpRequests.set(ip, { ...recent, count: recent.count + 1 });
+  if (perIpRequests.size > 5000) {
+    for (const [key, value] of perIpRequests) if (now - value.startedAt >= 60_000) perIpRequests.delete(key);
   }
 
   try {
