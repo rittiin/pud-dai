@@ -1,36 +1,25 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# พูดได้ (Pud-dai) — ต้นแบบ
 
-## Getting Started
+คัดกรองไข้หวัดใหญ่สำหรับประชาชน + ศูนย์เฝ้าระวังการระบาดสำหรับเจ้าหน้าที่ควบคุมโรค
+อ้างอิงนิยามโรคและแบบสอบสวน SARI_AI ของกรมควบคุมโรค
 
-First, run the development server:
-
+## รัน
 ```bash
+npm install
+cp .env.example .env.local   # ใส่ OPENAI_API_KEY ถ้าต้องการโหมด AI (ไม่ใส่ก็ใช้ได้)
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
+- `/screen` ประชาชน: แชตประเมินอาการ (มือถือ)
+- `/dashboard` เจ้าหน้าที่: line list, epidemic curve, แจ้งเตือนกลุ่มก้อน, ร่างรายงาน
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## หลักการ: AI ฟัง · กฎตัดสิน · คนอนุมัติ
+| ส่วน | ไฟล์ |
+|---|---|
+| นิยามโรค แหล่งอ้างอิง คำแนะนำประชาชน | `lib/flu/knowledge.ts` |
+| คำถามคัดกรอง (ดัดแปลงจาก SARI_AI 2) | `lib/flu/questions.ts` |
+| กฎจัดประเภทผู้ป่วย/ความเร่งด่วน/ระยะแพร่เชื้อ | `lib/flu/rules.ts` |
+| ดึงข้อมูลจากข้อความอิสระ (คำค้น) | `lib/extract.ts` |
+| ดึงข้อมูลด้วย AI + ตรวจหลักฐาน (grounding check) | `lib/ai.ts` |
+| ตรวจจับกลุ่มก้อน ≥5 ราย/7 วัน, epi curve, รายงาน | `lib/surveillance.ts` |
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+ข้อมูลเก็บใน `data/cases.json` (มีข้อมูลสมมติ 18 ราย สร้างอัตโนมัติ กด "รีเซ็ตข้อมูลสาธิต" ในแดชบอร์ดได้)

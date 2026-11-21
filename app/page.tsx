@@ -1,103 +1,54 @@
-import Image from "next/image";
+import Link from "next/link";
+import Mascot from "@/components/Mascot";
+import ShareQR from "@/components/ShareQR";
+import ShareButtons from "@/components/ShareButtons";
 
 export default function Home() {
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <main className="mx-auto flex min-h-dvh max-w-3xl flex-col justify-center px-4 py-10">
+      <div className="stagger mb-8">
+        <Mascot mood="happy" size={96} float />
+        <div className="mb-3 mt-4 inline-flex items-center gap-2 rounded-full bg-brand-soft px-3 py-1 text-xs font-semibold text-brand">
+          ต้นแบบ · ไข้หวัดใหญ่ (ICD-10 J10–J11)
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+        <h1 className="text-4xl font-bold tracking-tight">พูดได้ <span className="text-2xl font-semibold text-muted">Pud-dai</span></h1>
+        <p className="mt-3 max-w-xl text-lg leading-relaxed text-ink-2">
+          ประชาชนเล่าอาการด้วยภาษาของตัวเอง แล้วได้คำแนะนำที่ทำตามได้จริงทันที ข้อมูลเดียวกันส่งต่อเป็น line list ที่ตรวจสอบหลักฐานได้ทุกช่อง
+          ให้ทีมเฝ้าระวังเห็นกลุ่มก้อนตั้งแต่วันแรก
+        </p>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Link href="/screen" className="press lift group rounded-2xl bg-brand p-6 text-white shadow-sm ">
+          <div className="text-sm opacity-80">สำหรับประชาชน</div>
+          <div className="mt-1 text-2xl font-bold">ประเมินอาการ</div>
+          <p className="mt-2 text-sm leading-relaxed opacity-90">มีไข้ ไอ เจ็บคอ? คุยกับพูดได้ประมาณ 2 นาที แล้วรู้ว่าต้องไปหาหมอไหม ต้องหยุดงานถึงวันไหน และดูแลคนในบ้านอย่างไร</p>
+          <div className="mt-4 text-sm font-semibold">เริ่มเลย →</div>
+        </Link>
+        <Link href="/dashboard" className="press lift group rounded-2xl border border-line bg-surface p-6 shadow-sm ">
+          <div className="text-sm text-muted">สำหรับเจ้าหน้าที่ควบคุมโรค</div>
+          <div className="mt-1 text-2xl font-bold">ศูนย์เฝ้าระวัง</div>
+          <p className="mt-2 text-sm leading-relaxed text-ink-2">Line list อัตโนมัติ, epidemic curve, แจ้งเตือนกลุ่มก้อนตามเกณฑ์ 5 รายใน 1 สัปดาห์ และร่างรายงานสอบสวนโรค</p>
+          <div className="mt-4 text-sm font-semibold text-brand">เปิดแดชบอร์ด →</div>
+        </Link>
+      </div>
+
+      <div className="mt-6 flex flex-col items-center gap-5 rounded-2xl bg-surface p-5 shadow-sm sm:flex-row">
+        <ShareQR size={148} />
+        <div className="flex-1 text-center sm:text-left">
+          <div className="text-lg font-semibold">สแกนเพื่อลองใช้บนมือถือ</div>
+          <p className="mt-1 text-sm text-ink-2">หรือส่งต่อให้คนที่คุณห่วงใย ประเมินอาการได้ฟรี ไม่ต้องติดตั้งแอป</p>
+          <div className="mt-3 flex justify-center sm:justify-start">
+            <ShareButtons compact />
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-8 grid gap-3 text-sm text-ink-2 sm:grid-cols-3">
+        <div className="rounded-xl bg-surface p-4"><b className="text-ink">AI ฟัง</b><br />จับใจความจากข้อความอิสระ ทุกช่องมีหลักฐานเป็นคำพูดต้นฉบับ</div>
+        <div className="rounded-xl bg-surface p-4"><b className="text-ink">กฎตัดสิน</b><br />จัดประเภทผู้ป่วยและระดับความเร่งด่วนตามนิยามโรคของกรมควบคุมโรค</div>
+        <div className="rounded-xl bg-surface p-4"><b className="text-ink">คนอนุมัติ</b><br />เจ้าหน้าที่ยืนยันเคสและรายงานก่อนดำเนินการทุกครั้ง</div>
+      </div>
+    </main>
   );
 }

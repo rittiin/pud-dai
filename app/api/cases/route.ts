@@ -1,0 +1,44 @@
+import { NextResponse } from "next/server";
+import { addCase, listCases, resetDemo, updateReview, updateTest } from "@/lib/store";
+import { sanitize } from "@/lib/sanitize";
+import { assess, todayISO } from "@/lib/flu/rules";
+import { aiEnabled, aiProvider } from "@/lib/ai";
+import type { Answers, CaseRecord, ChatTurn, Evidence } from "@/lib/types";
+
+export const dynamic = "force-dynamic";
+
+export async function GET() {
+  return NextResponse.json({ cases: await listCases(), today: todayISO(), ai: aiEnabled(), provider: aiEnabled() ? aiProvider() : null });
+}
+
+export async function POST(req: Request) {
+  const body = (await req.json()) as { answers: Record<string, unknown>; evidence: Evidence; transcript: ChatTurn[] };
+  const answers = sanitize(body.answers ?? {}) as Answers;
+  const assessment = assess(answers);
+  if (answers.consent !== true) return NextResponse.json({ assessment, stored: false });
+  const rec = await addCase({
+    createdAt: new Date().toISOString(),
+    answers,
+    evidence: body.evidence ?? {},
+    transcript: (body.transcript ?? []).slice(-80),
+    assessment,
+    review: "pending",
+  });
+  return NextResponse.json({ assessment, stored: true, id: rec.id });
+}
+
+export async function PATCH(req: Request) {
+  const { id, review, reset, test } = (await req.json()) as { id?: string; review?: CaseRecord["review"]; reset?: boolean; test?: unknown };
+  if (reset) {
+    await resetDemo();
+    return NextResponse.json({ ok: true });
+  }
+  if (id && test !== undefined) {
+    const t = sanitize({ test }).test;
+    if (!t) return NextResponse.json({ ok: false }, { status: 400 });
+    const c = await updateTest(id, t);
+    return NextResponse.json({ ok: !!c, case: c ? { assessment: c.assessment } : undefined }); // never echo personal data back
+  }
+  if (!id || !review) return NextResponse.json({ ok: false }, { status: 400 });
+  return NextResponse.json({ ok: true, case: await updateReview(id, review) });
+}
