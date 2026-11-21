@@ -27,14 +27,16 @@ export default function Dashboard() {
   const [report, setReport] = useState<{ title: string; md: string; mode: string } | null>(null);
   const [loadingReport, setLoadingReport] = useState<string | null>(null);
   const [showQR, setShowQR] = useState(false);
+  const [readOnly, setReadOnly] = useState(true);
 
   const load = useCallback(async () => {
     const r = await fetch("/api/cases", { cache: "no-store" });
-    const d = (await r.json()) as { cases: CaseRecord[]; today: string; ai: boolean; provider: string | null };
+    const d = (await r.json()) as { cases: CaseRecord[]; today: string; ai: boolean; provider: string | null; readOnly: boolean };
     setCases(d.cases);
     setToday(d.today);
     setAi(d.ai);
     setProvider(d.provider);
+    setReadOnly(d.readOnly);
   }, []);
 
   useEffect(() => {
@@ -56,6 +58,7 @@ export default function Dashboard() {
   const pending = cases.filter((c) => c.review === "pending").length;
 
   async function review(id: string, review: CaseRecord["review"]) {
+    if (readOnly) return;
     await fetch("/api/cases", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, review }) });
     await load();
     setSel((s) => (s && s.id === id ? { ...s, review } : s));
@@ -73,6 +76,7 @@ export default function Dashboard() {
   }
 
   async function reset() {
+    if (readOnly) return;
     if (!confirm("รีเซ็ตข้อมูลเป็นชุดสาธิตใหม่? ข้อมูลที่ประชาชนส่งเข้ามาจะถูกลบ")) return;
     await fetch("/api/cases", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reset: true }) });
     load();
@@ -106,7 +110,7 @@ export default function Dashboard() {
           <div className="min-w-0 flex-1">
             <div className="font-semibold leading-tight">ศูนย์เฝ้าระวัง · ไข้หวัดใหญ่</div>
             <div className="text-xs text-muted">
-              ข้อมูล ณ {thaiDate(today)} · อัปเดตอัตโนมัติทุก 5 วินาที · ตัวสกัดข้อมูล: {ai ? `AI ${provider} + คำค้น` : "คำค้น (ยังไม่ได้ตั้ง API key)"}
+              ข้อมูล ณ {thaiDate(today)} · อัปเดตอัตโนมัติทุก 5 วินาที · ตัวสกัดข้อมูล: {ai ? `AI ${provider} + คำค้น` : "คำค้น (ยังไม่ได้ตั้ง API key)"}{readOnly ? " · โหมดสาธิต อ่านอย่างเดียว" : ""}
             </div>
           </div>
           <button onClick={() => setShowQR(true)} className="rounded-full bg-brand px-3 py-1.5 text-sm font-semibold text-white">
@@ -115,13 +119,14 @@ export default function Dashboard() {
           <button onClick={exportCsv} className="rounded-full border border-line px-3 py-1.5 text-sm">
             ส่งออก CSV
           </button>
-          <button onClick={reset} className="rounded-full border border-line px-3 py-1.5 text-sm text-muted">
+          {!readOnly && <button onClick={reset} className="rounded-full border border-line px-3 py-1.5 text-sm text-muted">
             รีเซ็ตข้อมูลสาธิต
-          </button>
+          </button>}
         </div>
       </header>
 
       <main className="mx-auto max-w-7xl space-y-4 px-4 py-4">
+        {readOnly && <div className="rounded-xl border border-brand/20 bg-brand-soft px-4 py-3 text-sm text-ink-2">โหมดสาธิต: แสดงข้อมูลสมมติเท่านั้น รายงานจากผู้ใช้จะไม่ถูกบันทึก และไม่สามารถแก้ไขสถานะเคสได้</div>}
         {/* Alerts */}
         {(clusters.some((c) => c.meetsOutbreak) || alerts.length > 0) && (
           <section className="space-y-2">
@@ -270,13 +275,13 @@ export default function Dashboard() {
         </section>
       </main>
 
-      {sel && <CaseDrawer c={cases.find((x) => x.id === sel.id) ?? sel} onClose={() => setSel(null)} onReview={review} />}
+      {sel && <CaseDrawer c={cases.find((x) => x.id === sel.id) ?? sel} onClose={() => setSel(null)} onReview={review} readOnly={readOnly} />}
       {report && <ReportModal r={report} onClose={() => setReport(null)} />}
       {showQR && (
         <div className="fixed inset-0 z-30 grid place-items-center bg-black/40 p-4" onClick={() => setShowQR(false)}>
           <div className="rise rounded-3xl bg-surface p-8 text-center shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-1 text-2xl font-bold">สแกนเพื่อประเมินอาการ</div>
-            <p className="mb-5 text-ink-2">แล้วดูเคสของคุณขึ้นบนจอนี้ภายใน 5 วินาที</p>
+            <p className="mb-5 text-ink-2">{readOnly ? "แดชบอร์ดนี้แสดงข้อมูลสมมติสำหรับสาธิต" : "แล้วดูเคสของคุณขึ้นบนจอนี้ภายใน 5 วินาที"}</p>
             <ShareQR size={300} />
             <button onClick={() => setShowQR(false)} className="mt-5 block w-full rounded-xl border border-line py-2.5">
               ปิด
@@ -353,7 +358,7 @@ function EpiCurve({ data }: { data: { date: string; count: number }[] }) {
   );
 }
 
-function CaseDrawer({ c, onClose, onReview }: { c: CaseRecord; onClose: () => void; onReview: (id: string, r: CaseRecord["review"]) => void }) {
+function CaseDrawer({ c, onClose, onReview, readOnly }: { c: CaseRecord; onClose: () => void; onReview: (id: string, r: CaseRecord["review"]) => void; readOnly: boolean }) {
   const keys = (Object.keys(FIELD_LABEL) as AnswerKey[]).filter((k) => c.answers[k] !== undefined && k !== "consent");
   return (
     <div className="fixed inset-0 z-30 flex justify-end bg-black/30" onClick={onClose}>
@@ -418,14 +423,14 @@ function CaseDrawer({ c, onClose, onReview }: { c: CaseRecord; onClose: () => vo
               </div>
             </div>
           )}
-          <div className="flex gap-2">
+          {!readOnly && <div className="flex gap-2">
             <button onClick={() => onReview(c.id, "verified")} className="flex-1 rounded-xl bg-brand py-2.5 text-sm font-semibold text-white">
               ยืนยันเคส
             </button>
             <button onClick={() => onReview(c.id, "dismissed")} className="flex-1 rounded-xl border border-line py-2.5 text-sm">
               ตัดออก (ข้อมูลซ้ำ/ไม่น่าเชื่อถือ)
             </button>
-          </div>
+          </div>}
         </div>
       </aside>
     </div>

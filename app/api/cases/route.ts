@@ -4,18 +4,19 @@ import { sanitize } from "@/lib/sanitize";
 import { assess, todayISO } from "@/lib/flu/rules";
 import { aiEnabled, aiProvider } from "@/lib/ai";
 import type { Answers, CaseRecord, ChatTurn, Evidence } from "@/lib/types";
+import { PUBLIC_DEMO_MODE } from "@/lib/demo";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  return NextResponse.json({ cases: await listCases(), today: todayISO(), ai: aiEnabled(), provider: aiEnabled() ? aiProvider() : null });
+  return NextResponse.json({ cases: await listCases(), today: todayISO(), ai: aiEnabled(), provider: aiEnabled() ? aiProvider() : null, readOnly: PUBLIC_DEMO_MODE });
 }
 
 export async function POST(req: Request) {
   const body = (await req.json()) as { answers: Record<string, unknown>; evidence: Evidence; transcript: ChatTurn[] };
   const answers = sanitize(body.answers ?? {}) as Answers;
   const assessment = assess(answers);
-  if (answers.consent !== true) return NextResponse.json({ assessment, stored: false });
+  if (answers.consent !== true || PUBLIC_DEMO_MODE) return NextResponse.json({ assessment, stored: false, demo: PUBLIC_DEMO_MODE });
   const rec = await addCase({
     createdAt: new Date().toISOString(),
     answers,
@@ -28,6 +29,7 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
+  if (PUBLIC_DEMO_MODE) return NextResponse.json({ ok: false, readOnly: true }, { status: 403 });
   const { id, review, reset, test } = (await req.json()) as { id?: string; review?: CaseRecord["review"]; reset?: boolean; test?: unknown };
   if (reset) {
     await resetDemo();

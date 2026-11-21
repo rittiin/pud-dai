@@ -1,20 +1,21 @@
-// Server-only OpenAI calls. If OPENAI_API_KEY is missing, callers fall back to the offline code paths.
+// Server-only LLM calls. With no key, callers fall back to the offline code paths.
 import OpenAI from "openai";
 import type { Answers, Evidence } from "./types";
 import type { Extraction } from "./extract";
+import { PUBLIC_DEMO_MODE } from "./demo";
 
-// Provider: Typhoon (Thai LLM, OpenAI-compatible) if TYPHOON_API_KEY is set, otherwise OpenAI.
-const TYPHOON = !!process.env.TYPHOON_API_KEY;
+const OPENAI = !PUBLIC_DEMO_MODE && !!process.env.OPENAI_API_KEY;
+const TYPHOON = !PUBLIC_DEMO_MODE && !OPENAI && !!process.env.TYPHOON_API_KEY;
 const MODEL = TYPHOON
   ? process.env.TYPHOON_MODEL || "typhoon-v2.5-30b-a3b-instruct"
   : process.env.OPENAI_MODEL || "gpt-5-mini";
 
 export function aiEnabled(): boolean {
-  return TYPHOON || !!process.env.OPENAI_API_KEY;
+  return !PUBLIC_DEMO_MODE && (TYPHOON || !!process.env.OPENAI_API_KEY);
 }
 
 export function aiProvider(): string {
-  return TYPHOON ? `Typhoon (${MODEL})` : `OpenAI (${MODEL})`;
+  return `${TYPHOON ? "Typhoon" : "OpenAI"} (${MODEL})`;
 }
 
 function client() {
@@ -23,8 +24,7 @@ function client() {
     : new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 }
 
-// Typhoon has no JSON mode and defaults to max_tokens=150, so set both explicitly per provider.
-function opts(json: boolean) {
+function requestOptions(json: boolean) {
   return TYPHOON
     ? { max_tokens: 2048, temperature: json ? 0.1 : 0.4 }
     : json
@@ -98,7 +98,7 @@ const norm = (s: string) => s.replace(/\s+/g, "").replace(/ํา/g, "ำ");
 export async function aiExtract(text: string, today: string, context?: string): Promise<Extraction & { dropped: string[] }> {
   const res = await client().chat.completions.create({
     model: MODEL,
-    ...opts(true),
+    ...requestOptions(true),
     messages: [
       { role: "system", content: EXTRACT_SYSTEM },
       {
@@ -137,7 +137,7 @@ export async function aiExtract(text: string, today: string, context?: string): 
 export async function aiReport(facts: string): Promise<string> {
   const res = await client().chat.completions.create({
     model: MODEL,
-    ...opts(false),
+    ...requestOptions(false),
     messages: [
       {
         role: "system",
