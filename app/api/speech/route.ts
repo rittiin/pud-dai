@@ -4,13 +4,13 @@ import { PUBLIC_DEMO_MODE } from "@/lib/demo";
 
 export const dynamic = "force-dynamic";
 
-const publicVoiceAllowed = () => !PUBLIC_DEMO_MODE || process.env.ALLOW_PUBLIC_OPENAI_TTS === "1";
+const publicVoiceAllowed = () => !PUBLIC_DEMO_MODE || Boolean(process.env.OPENAI_API_KEY);
 const canUseOpenAiVoice = () => publicVoiceAllowed() && Boolean(process.env.OPENAI_API_KEY);
 const perIpRequests = new Map<string, { startedAt: number; count: number }>();
 
 export async function GET() {
   const available = canUseOpenAiVoice();
-  const reason = available ? "ready" : !publicVoiceAllowed() ? "public_voice_disabled" : "server_key_missing";
+  const reason = available ? "ready" : "server_key_missing";
   return NextResponse.json({ available, reason }, { headers: { "Cache-Control": "no-store" } });
 }
 
