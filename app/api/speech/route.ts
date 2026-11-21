@@ -9,7 +9,9 @@ const canUseOpenAiVoice = () => publicVoiceAllowed() && Boolean(process.env.OPEN
 const perIpRequests = new Map<string, { startedAt: number; count: number }>();
 
 export async function GET() {
-  return NextResponse.json({ available: canUseOpenAiVoice() }, { headers: { "Cache-Control": "no-store" } });
+  const available = canUseOpenAiVoice();
+  const reason = available ? "ready" : !publicVoiceAllowed() ? "public_voice_disabled" : "server_key_missing";
+  return NextResponse.json({ available, reason }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(req: Request) {
