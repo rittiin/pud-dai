@@ -19,11 +19,12 @@ const TONE: Record<string, { bg: string; soft: string; ink: string; mood: Mood; 
 
 function headline(a: Assessment, ans: Answers): { title: string; body: string } {
   const disease = DISEASE_CATALOG[a.disease];
+  const hasGiSymptoms = (ans.symptoms ?? []).some((s) => ["diarrhea", "vomiting", "abdominal_pain", "bloody_stool"].includes(s));
   switch (a.urgency) {
     case "emergency":
       return {
         title: "ไปห้องฉุกเฉินทันที หรือโทร 1669",
-        body: a.disease === "acute_diarrhea" || a.disease === "food_poisoning"
+        body: hasGiSymptoms || a.disease === "acute_diarrhea" || a.disease === "food_poisoning"
           ? "มีสัญญาณอันตรายหรือเสี่ยงขาดน้ำรุนแรง ควรไปฉุกเฉินทันที อย่ารอดูอาการที่บ้าน"
           : "คุณมีสัญญาณอันตรายที่อาจเป็นภาวะแทรกซ้อนรุนแรง อย่ารอดูอาการที่บ้าน ระหว่างเดินทางให้สวมหน้ากาก",
       };
@@ -54,7 +55,11 @@ function headline(a: Assessment, ans: Answers): { title: string; body: string } 
         body: "ข้อมูลของคุณช่วยให้เจ้าหน้าที่เห็นภาพการระบาดในพื้นที่ แม้หายแล้วก็ยังมีประโยชน์มาก",
       };
     default:
-      return a.meetsClinical && a.disease === "flu"
+      return a.disease === "unknown" && hasGiSymptoms
+        ? { title: "มีอาการทางเดินอาหาร แต่ยังไม่ทราบสาเหตุ", body: "จิบน้ำเกลือแร่ ORS ที่ผสมตามฉลาก และสังเกตอาการ ผลคัดกรองนี้ยังแยกสาเหตุไม่ได้ หากดื่มน้ำไม่ได้ ปัสสาวะน้อย ซึม ถ่ายเป็นมูกเลือด หรืออาการแย่ลง ให้พบแพทย์" }
+        : a.disease === "unknown" && (ans.symptoms ?? []).some((s) => ["cough", "sore_throat", "runny_nose", "sputum"].includes(s))
+          ? { title: "มีอาการทางเดินหายใจ แต่ยังไม่ทราบสาเหตุ", body: "อาการคล้ายกันเกิดได้จากหลายโรค อาจพิจารณาตรวจโควิดด้วยชุด ATK สำหรับตรวจเอง และติดตามอาการ ผลตรวจไม่ใช่การวินิจฉัย" }
+          : a.meetsClinical && a.disease === "flu"
         ? { title: "อาการเข้าได้กับไข้หวัดใหญ่", body: "อาการเข้าได้กับนิยามคัดกรองไข้หวัดใหญ่ แต่ยังไม่ใช่การวินิจฉัย หากอาการไม่รุนแรงให้พักผ่อนและสังเกตอาการ" }
         : a.meetsClinical
           ? { title: `อาการเข้าเกณฑ์คัดกรอง${disease.label}`, body: `${disease.clinical} ผลนี้เป็นการคัดกรองเบื้องต้น ไม่ใช่การวินิจฉัย` }
@@ -104,8 +109,15 @@ export default function ResultCard({
   const h = headline(a, answers);
   const today = todayISO();
   const isolating = a.disease === "flu" && a.urgency !== "recovered" && a.contagiousUntil && a.contagiousUntil >= today;
-  const gastrointestinal = a.disease === "acute_diarrhea" || a.disease === "food_poisoning";
-  const selfCare = gastrointestinal ? ADVICE.giSelfCare : a.disease === "flu" ? ADVICE.selfCare : ADVICE.selfCare.filter((item) => !item.includes("ไข้หวัดใหญ่"));
+  const giSymptoms = (answers.symptoms ?? []).some((s) => ["diarrhea", "vomiting", "abdominal_pain", "bloody_stool"].includes(s));
+  const gastrointestinal = a.disease === "acute_diarrhea" || a.disease === "food_poisoning" || giSymptoms;
+  const selfCare = gastrointestinal && a.disease === "flu"
+    ? [...ADVICE.selfCare, ...ADVICE.giSelfCare]
+    : gastrointestinal
+      ? ADVICE.giSelfCare
+      : a.disease === "flu"
+        ? ADVICE.selfCare
+        : ADVICE.selfCare.filter((item) => !item.includes("ไข้หวัดใหญ่"));
 
   const sections: { id: string; title: string; items: string[] }[] = [
     ...(a.urgency === "recovered"

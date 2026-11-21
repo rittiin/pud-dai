@@ -60,7 +60,9 @@ export const QUESTIONS: Question[] = [
     key: "symptoms",
     kind: "multi",
     formRef: "2.2 อาการและอาการแสดง",
-    prompt: (a) => a.diseaseFocus === "flu" ? "ตอนนี้หรือช่วงที่ป่วย มีอาการอะไรบ้างครับ (เลือกได้หลายข้อ)" : "ตอนนี้หรือช่วงที่ป่วย มีอาการอะไรบ้างครับ โดยเฉพาะอาการทางท้อง (เลือกได้หลายข้อ)",
+    prompt: (a) => a.diseaseFocus === "acute_diarrhea" || a.diseaseFocus === "food_poisoning"
+      ? "ตอนนี้หรือช่วงที่ป่วย มีอาการอะไรบ้างครับ โดยเฉพาะอาการทางท้อง (เลือกได้หลายข้อ)"
+      : "ตอนนี้หรือช่วงที่ป่วย มีอาการอะไรบ้างครับ (เลือกได้หลายข้อ)",
     options: [...symOrder.map((s) => ({ label: SYM_LABEL[s], value: s })), { label: "ไม่มีอาการเหล่านี้", value: "__none", exclusive: true }],
     ask: (a) => a.consent === true,
   },
@@ -70,7 +72,7 @@ export const QUESTIONS: Question[] = [
     formRef: "จำนวนครั้งที่ถ่ายเหลวใน 24 ชั่วโมง",
     prompt: () => "ใน 24 ชั่วโมงที่ผ่านมา ถ่ายเหลวกี่ครั้งครับ?",
     hint: "จำนวนครั้ง เช่น 3",
-    ask: (a) => sick(a) && a.diseaseFocus === "acute_diarrhea" && (a.symptoms ?? []).includes("diarrhea"),
+    ask: (a) => sick(a) && (a.diseaseFocus === "acute_diarrhea" || a.diseaseFocus === "unknown") && (a.symptoms ?? []).includes("diarrhea"),
   },
   {
     key: "sharedMeal",
@@ -78,7 +80,7 @@ export const QUESTIONS: Question[] = [
     formRef: "ประวัติรับประทานอาหารร่วมกัน",
     prompt: () => "ก่อนเริ่มป่วย ได้รับประทานอาหารมื้อเดียวกันกับคนอื่นที่มีอาการคล้ายกันไหมครับ?",
     options: [{ label: "ใช่", value: true }, { label: "ไม่ใช่", value: false }, { label: "ไม่แน่ใจ", value: null }],
-    ask: (a) => sick(a) && a.diseaseFocus === "food_poisoning" && (a.symptoms ?? []).some((s) => ["diarrhea", "vomiting", "abdominal_pain"].includes(s)),
+    ask: (a) => sick(a) && (a.diseaseFocus === "food_poisoning" || a.diseaseFocus === "unknown") && (a.symptoms ?? []).some((s) => ["diarrhea", "vomiting", "abdominal_pain"].includes(s)),
   },
   {
     key: "onsetDate",

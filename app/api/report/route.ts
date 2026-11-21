@@ -10,7 +10,7 @@ export async function POST(req: Request) {
   const cl = detectClusters(await listCases()).find((c) => c.key === clusterKey);
   if (!cl) return NextResponse.json({ error: "not found" }, { status: 404 });
   const facts = clusterFacts(cl, today);
-  if (aiEnabled()) {
+  if (aiEnabled() && cl.cases.length > 0 && cl.cases.every((c) => c.aiConsent === true)) {
     try {
       const md = await aiReport(facts);
       if (md) return NextResponse.json({ mode: "ai", markdown: md, facts });

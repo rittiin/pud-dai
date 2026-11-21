@@ -13,16 +13,17 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const body = (await req.json()) as { answers: Record<string, unknown>; evidence: Evidence; transcript: ChatTurn[] };
+  const body = (await req.json()) as { answers: Record<string, unknown>; evidence: Evidence; transcript: ChatTurn[]; storeConsent?: boolean; aiConsent?: boolean };
   const answers = sanitize(body.answers ?? {}) as Answers;
   const assessment = assess(answers);
-  if (answers.consent !== true || PUBLIC_DEMO_MODE) return NextResponse.json({ assessment, stored: false, demo: PUBLIC_DEMO_MODE });
+  if (answers.consent !== true || body.storeConsent !== true || PUBLIC_DEMO_MODE) return NextResponse.json({ assessment, stored: false, demo: PUBLIC_DEMO_MODE });
   const rec = await addCase({
     createdAt: new Date().toISOString(),
     answers,
     evidence: body.evidence ?? {},
     transcript: (body.transcript ?? []).slice(-80),
     assessment,
+    aiConsent: body.aiConsent === true,
     review: "pending",
   });
   return NextResponse.json({ assessment, stored: true, id: rec.id });

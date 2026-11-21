@@ -117,5 +117,7 @@ export interface CaseRecord {
   evidence: Evidence;
   transcript: ChatTurn[];
   assessment: Assessment;
+  /** Explicit opt-in before stored facts are sent to an external AI for reports. */
+  aiConsent?: boolean;
   review?: "pending" | "verified" | "dismissed";
 }

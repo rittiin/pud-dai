@@ -73,7 +73,7 @@ function useSpeech(onText: (t: string) => void) {
   return { supported, listening, toggle };
 }
 
-function speakThai(text: string) {
+function speakOnDevice(text: string) {
   if (typeof window === "undefined" || !window.speechSynthesis || !text) return;
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
@@ -84,7 +84,9 @@ function speakThai(text: string) {
   window.speechSynthesis.speak(utterance);
 }
 
-export default function Chat() {
+type ConsentChoices = { processing: boolean; store: boolean; ai: boolean; openAiVoice: boolean; microphone: boolean };
+
+export default function Chat({ publicDemo, openAiVoiceAvailable }: { publicDemo: boolean; openAiVoiceAvailable: boolean }) {
   const [answers, setAnswers] = useState<Answers>({});
   const [evidence, setEvidence] = useState<Evidence>({});
   const [msgs, setMsgs] = useState<Msg[]>([]);
@@ -96,11 +98,70 @@ export default function Chat() {
   const [busy, setBusy] = useState(false);
   const [multi, setMulti] = useState<string[]>([]);
   const [big, setBig] = useState(false);
+  const [storeConsent, setStoreConsent] = useState(false);
+  const [aiConsent, setAiConsent] = useState(false);
+  const [voiceConsent, setVoiceConsent] = useState(false);
+  const [micConsent, setMicConsent] = useState(false);
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
   const today = todayISO();
 
   const onSpeech = useCallback((t: string) => setInput(t), []);
   const speech = useSpeech(onSpeech);
+
+  const speakText = useCallback(async (text: string) => {
+    if (!text.trim()) return;
+    audioRef.current?.pause();
+    audioRef.current = null;
+    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+    audioUrlRef.current = null;
+    if (!voiceConsent || !openAiVoiceAvailable) {
+      setVoiceBusy(false);
+      setVoiceStatus("");
+      speakOnDevice(text);
+      return;
+    }
+    setVoiceBusy(true);
+    setVoiceStatus("");
+    try {
+      const res = await fetch("/api/speech", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, consent: true }),
+      });
+      if (!res.ok) throw new Error("speech unavailable");
+      const url = URL.createObjectURL(await res.blob());
+      audioUrlRef.current = url;
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      const cleanup = () => {
+        if (audioUrlRef.current === url) audioUrlRef.current = null;
+        URL.revokeObjectURL(url);
+        if (audioRef.current === audio) audioRef.current = null;
+        setVoiceBusy(false);
+      };
+      audio.onended = cleanup;
+      audio.onerror = cleanup;
+      await audio.play();
+    } catch {
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+      audioRef.current = null;
+      setVoiceBusy(false);
+      setVoiceStatus("สร้างเสียง OpenAI ไม่สำเร็จ ใช้เสียงจากอุปกรณ์แทน");
+      speakOnDevice(text);
+    }
+  }, [openAiVoiceAvailable, voiceConsent]);
+
+  useEffect(() => () => {
+    audioRef.current?.pause();
+    audioRef.current = null;
+    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+    audioUrlRef.current = null;
+  }, []);
 
   const q: Question | null = stage === "qa" ? nextQuestion(answers) : null;
 
@@ -143,12 +204,17 @@ export default function Chat() {
           : "happy"
       : "happy";
 
-  function start(consent: boolean) {
-    const a: Answers = { consent };
-    const ev: Evidence = { consent: { quote: consent ? "ยินยอม" : "ไม่ยินยอม", via: "button" } };
+  function start(choices: ConsentChoices) {
+    const a: Answers = { consent: choices.processing };
+    const ev: Evidence = { consent: { quote: choices.processing ? "ยินยอมให้ประมวลผลเพื่อคัดกรอง" : "ไม่ยินยอม", via: "button" } };
+    setStoreConsent(choices.store);
+    setAiConsent(choices.ai);
+    setVoiceConsent(choices.openAiVoice);
+    setMicConsent(choices.microphone);
+    setVoiceStatus("");
     setAnswers(a);
     setEvidence(ev);
-    if (!consent) {
+    if (!choices.processing) {
       setStage("done");
       setMsgs([{ id: ++uid, from: "result", assessment: emptyAssessment(), answers: a }]);
       return;
@@ -172,9 +238,12 @@ export default function Chat() {
       const res = await fetch("/api/cases", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers: a, evidence: ev, transcript: transcript() }),
+        body: JSON.stringify({ answers: a, evidence: ev, transcript: transcript(), storeConsent, aiConsent }),
       });
-      const data = (await res.json()) as { assessment: Assessment; id?: string };
+      const data = (await res.json()) as { assessment: Assessment; id?: string; stored?: boolean; demo?: boolean };
+      if (!data.stored) {
+        push({ from: "bot", text: data.demo ? "ผลคัดกรองเสร็จแล้วครับ เดโมสาธารณะไม่ได้บันทึกคำตอบ" : "ผลคัดกรองเสร็จแล้วครับ ตามตัวเลือกของคุณ ระบบไม่ได้บันทึกคำตอบไว้ในแดชบอร์ด" });
+      }
       push({ from: "result", assessment: data.assessment, answers: a, caseId: data.id });
     } finally {
       setBusy(false);
@@ -240,7 +309,7 @@ export default function Chat() {
       const res = await fetch("/api/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, context: q?.prompt(answers) }),
+        body: JSON.stringify({ text, context: q?.prompt(answers), aiConsent }),
       });
       const data = (await res.json()) as { answers: Partial<Answers>; evidence: Evidence; mode: string; dropped: string[] };
       const merged: Answers = { ...answers };
@@ -288,6 +357,11 @@ export default function Chat() {
     setCandidateTerm("");
     setCandidateMeaning("");
     setCandidateDialect("unknown");
+    setStoreConsent(false);
+    setAiConsent(false);
+    setVoiceConsent(false);
+    setMicConsent(false);
+    setVoiceStatus("");
   }
 
   async function submitCandidate() {
@@ -315,7 +389,7 @@ export default function Chat() {
   const prog = progress(answers);
   const showInput = stage === "free" || stage === "clarify_term" || stage === "clarify_meaning" || (stage === "qa" && q);
 
-  if (stage === "welcome") return <Welcome onStart={start} big={big} setBig={setBig} />;
+  if (stage === "welcome") return <Welcome onStart={start} big={big} setBig={setBig} publicDemo={publicDemo} openAiVoiceAvailable={openAiVoiceAvailable} />;
 
   return (
     <div className="mx-auto flex h-dvh max-w-xl flex-col bg-bg">
@@ -325,7 +399,7 @@ export default function Chat() {
         </Link>
         <div className="min-w-0 flex-1">
           <div className="font-semibold leading-tight">น้องพูดได้</div>
-          <div className="text-xs text-muted">{busy ? "กำลังอ่าน…" : speech.listening ? "กำลังฟัง…" : "ผู้ช่วยคัดกรอง 3 กลุ่มโรค"}</div>
+          <div className="text-xs text-muted">{voiceBusy ? "กำลังสร้างเสียง…" : speech.listening ? "กำลังฟัง…" : voiceStatus || "ผู้ช่วยคัดกรอง 3 กลุ่มโรค"}</div>
         </div>
         <TextSize big={big} setBig={setBig} />
         <button onClick={restart} className="press rounded-full border border-line px-3 py-1.5 text-sm text-ink-2">
@@ -348,7 +422,7 @@ export default function Chat() {
 
       <main className="flex-1 space-y-3 overflow-y-auto px-4 py-4" aria-live="polite">
         {msgs.map((m, i) => (
-          <Bubble key={m.id} m={m} showAvatar={m.from === "bot" && msgs[i + 1]?.from !== "bot"} onRestart={restart} onSpeak={speakThai} />
+          <Bubble key={m.id} m={m} showAvatar={m.from === "bot" && msgs[i + 1]?.from !== "bot"} onRestart={restart} onSpeak={speakText} voiceLabel={voiceConsent && openAiVoiceAvailable ? "🔊 เสียง AI จาก OpenAI" : "🔊 อ่านด้วยเสียงอุปกรณ์"} />
         ))}
         {busy && (
           <div className="rise flex items-end gap-2">
@@ -479,7 +553,7 @@ export default function Chat() {
           className="flex items-center gap-2 border-t border-line bg-surface px-3 py-3"
           style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
         >
-          {speech.supported && (
+          {speech.supported && micConsent && (
             <button
               type="button"
               onClick={speech.toggle}
@@ -511,29 +585,45 @@ export default function Chat() {
 }
 
 /* ---------- Welcome ---------- */
-function Welcome({ onStart, big, setBig }: { onStart: (c: boolean) => void; big: boolean; setBig: (b: boolean) => void }) {
-  const [showPdpa, setShowPdpa] = useState(false);
+function Welcome({
+  onStart,
+  big,
+  setBig,
+  publicDemo,
+  openAiVoiceAvailable,
+}: {
+  onStart: (choices: ConsentChoices) => void;
+  big: boolean;
+  setBig: (b: boolean) => void;
+  publicDemo: boolean;
+  openAiVoiceAvailable: boolean;
+}) {
+  const [processing, setProcessing] = useState(false);
+  const [store, setStore] = useState(false);
+  const [ai, setAi] = useState(false);
+  const [openAiVoice, setOpenAiVoice] = useState(false);
+  const [microphone, setMicrophone] = useState(false);
+  const begin = (allowed: boolean) => onStart({ processing: allowed, store: allowed && store, ai: allowed && ai, openAiVoice: allowed && openAiVoice, microphone: allowed && microphone });
   return (
-    <div className="mx-auto flex min-h-dvh max-w-xl flex-col bg-gradient-to-b from-brand-soft to-bg px-5 pb-6 pt-4">
+    <div className="mx-auto flex min-h-dvh max-w-xl flex-col overflow-y-auto bg-gradient-to-b from-brand-soft to-bg px-5 pb-6 pt-4">
       <div className="flex items-center justify-between">
         <Link href="/" className="text-sm text-ink-2">
           ← หน้าแรก
         </Link>
         <TextSize big={big} setBig={setBig} />
       </div>
-      <div className="stagger flex flex-1 flex-col items-center justify-center text-center">
-        <Mascot mood="happy" size={148} float />
-        <h1 className="mt-4 text-[26px] font-bold leading-tight">สวัสดีครับ ผมน้องพูดได้</h1>
-        <p className="mt-2 max-w-sm text-[17px] leading-relaxed text-ink-2">
-          มีไข้ ไอ ถ่ายเหลว อาเจียน หรือปวดท้อง? เล่าอาการให้ผมฟัง แล้วผมช่วยคัดกรองเบื้องต้นและแนะนำว่าควรทำอะไรต่อ
+      <div className="stagger flex flex-col items-center py-5 text-center">
+        <Mascot mood="happy" size={112} float />
+        <h1 className="mt-3 text-[26px] font-bold leading-tight">สวัสดีครับ ผมน้องพูดได้</h1>
+        <p className="mt-2 max-w-sm text-[16px] leading-relaxed text-ink-2">
+          ช่วยคัดกรองเบื้องต้นเมื่อมีไข้ ไอ ถ่ายเหลว อาเจียน หรือปวดท้อง ผลไม่ใช่การวินิจฉัยของแพทย์
         </p>
-        <ul className="mt-6 w-full max-w-sm space-y-2.5 text-left">
+        <ul className="mt-4 w-full max-w-sm space-y-2 text-left">
           {[
             ["🩺", "ควรไปหาหมอไหม และไปเมื่อไหร่"],
-            ["🏠", "ต้องหยุดงานหรือหยุดเรียนถึงวันไหน"],
-            ["👨‍👩‍👧", "ดูแลตัวเองและคนในบ้านอย่างไร"],
+            ["🏠", "คำแนะนำดูแลตัวเองและคนใกล้ชิด"],
           ].map(([icon, t]) => (
-            <li key={t} className="flex items-center gap-3 rounded-2xl bg-surface px-4 py-3 text-[16px] shadow-sm">
+            <li key={t} className="flex items-center gap-3 rounded-2xl bg-surface px-4 py-2.5 text-[15px] shadow-sm">
               <span className="text-xl" aria-hidden>
                 {icon}
               </span>
@@ -542,30 +632,61 @@ function Welcome({ onStart, big, setBig }: { onStart: (c: boolean) => void; big:
           ))}
         </ul>
       </div>
-      <div className="space-y-2.5">
-        <button onClick={() => onStart(true)} className="press w-full rounded-2xl bg-brand py-4 text-lg font-semibold text-white shadow-md shadow-brand/20">
-          เริ่มประเมินอาการ
-        </button>
-        <p className="px-2 text-center text-xs leading-relaxed text-muted">
-          ต้นแบบนี้ใช้เพื่อสาธิต ไม่ใช่บริการของหน่วยงานจริง โปรดใช้ข้อมูลสมมติเท่านั้น เมื่อกดเริ่ม คุณยินยอมให้ระบบประเมินคำตอบเพื่อการสาธิต{" "}
-          <button onClick={() => setShowPdpa((s) => !s)} className="underline">
-            {showPdpa ? "ซ่อน" : "อ่านเพิ่ม"}
-          </button>
+      <div className="space-y-2.5 rounded-2xl bg-surface p-3 shadow-sm">
+        <div className="text-left text-sm font-semibold">ก่อนเริ่ม: เลือกสิ่งที่ยินยอม</div>
+        <p className="text-left text-xs leading-relaxed text-ink-2">
+          ต้นแบบนี้ไม่ใช่บริการของหน่วยงานจริง ข้อมูลอาการเป็นข้อมูลสุขภาพ โปรดใช้ข้อมูลสมมติเท่านั้น หากจะใช้กับผู้ป่วยจริง ผู้ดูแลต้องระบุผู้ควบคุมข้อมูล ช่องทางติดต่อ วัตถุประสงค์ และระยะเวลาเก็บให้ชัดก่อน
         </p>
-        {showPdpa && (
-          <div className="rise rounded-xl bg-surface p-3 text-xs leading-relaxed text-ink-2">
-            อย่ากรอกชื่อ เบอร์โทร หรือข้อมูลสุขภาพจริง เว็บเดโมสาธารณะไม่บันทึกรายงาน และ Dashboard แสดงข้อมูลสมมติเท่านั้น
-            <button onClick={() => onStart(false)} className="mt-2 block text-ink underline">
-              ไม่ยินยอม ขอดูคำแนะนำทั่วไปอย่างเดียว
-            </button>
-          </div>
-        )}
+        <ConsentCheck checked={processing} onChange={setProcessing} title="จำเป็น: ประมวลผลคำตอบเพื่อสร้างผลคัดกรอง" detail="ระบบรับคำตอบไปคำนวณผลและแสดงคำแนะนำ โดยไม่ถือว่าอนุญาตให้บันทึกหรือส่งให้ AI ภายนอก" />
+        <ConsentCheck checked={store} onChange={setStore} disabled={publicDemo} title="ตัวเลือก: บันทึกข้อมูลในแดชบอร์ด" detail={publicDemo ? "ปิดอยู่ในเว็บเดโมสาธารณะ ซึ่งไม่บันทึกรายงาน" : "บันทึกคำตอบ หลักฐานข้อความ และบทสนทนาไว้ใน data/cases.json ของเซิร์ฟเวอร์โครงการ"} />
+        <ConsentCheck checked={ai} onChange={setAi} disabled={publicDemo} title="ตัวเลือก: ส่งข้อความอาการให้ AI ภายนอกช่วยแยกข้อมูลและร่างรายงาน" detail={publicDemo ? "ปิดในเว็บเดโมสาธารณะ ระบบใช้การจับคำแบบออฟไลน์" : "เมื่อไม่เลือก ระบบใช้การจับคำแบบออฟไลน์ ข้อความและข้อมูลสรุปจะไปยังผู้ให้บริการ AI ตามการตั้งค่าเซิร์ฟเวอร์"} />
+        <ConsentCheck
+          checked={openAiVoice}
+          onChange={setOpenAiVoice}
+          disabled={!openAiVoiceAvailable}
+          title="ตัวเลือก: ใช้เสียง AI จาก OpenAI อ่านคำถามและทวนสิ่งที่เข้าใจ"
+          detail={openAiVoiceAvailable ? "เมื่อกดปุ่มเสียง ระบบจะส่งเฉพาะข้อความที่ขอให้อ่านไปยัง OpenAI API เพื่อสร้างเสียง AI ไม่ใช่เสียงมนุษย์" : "ปิดในเว็บเดโมสาธารณะหรือเมื่อเซิร์ฟเวอร์ยังไม่มี OPENAI_API_KEY; ใช้เสียงจากอุปกรณ์แทนได้"}
+        />
+        <ConsentCheck checked={microphone} onChange={setMicrophone} title="ตัวเลือก: ใช้ไมโครโฟนแปลงเสียงเป็นข้อความ" detail="จะไม่เริ่มฟังจนกว่าคุณกดยอมรับด้านล่างและกดปุ่มไมค์เอง เสียงอาจถูกประมวลผลโดยเบราว์เซอร์หรือผู้ให้บริการของเบราว์เซอร์" />
+        {publicDemo && <p className="rounded-lg bg-blue-soft px-3 py-2 text-xs leading-relaxed text-ink-2">เว็บเดโมนี้ไม่บันทึกคำตอบและปิด AI ภายนอก ใช้ข้อมูลสมมติเท่านั้น · แดชบอร์ดแสดงข้อมูลตัวอย่าง</p>}
+        <button onClick={() => begin(true)} disabled={!processing} className="press w-full rounded-2xl bg-brand py-3.5 text-lg font-semibold text-white shadow-md shadow-brand/20 disabled:cursor-not-allowed disabled:opacity-40">
+          ยินยอมและเริ่มประเมิน
+        </button>
+        <button onClick={() => begin(false)} className="w-full rounded-xl border border-line py-2.5 text-sm text-ink-2">
+          ไม่ยินยอม ขอดูคำแนะนำทั่วไป
+        </button>
+      </div>
+      <div className="mt-3 space-y-1">
         <p className="text-center text-[11px] text-muted">ผลนี้เป็นการคัดกรองเบื้องต้นตามนิยามโรคของกรมควบคุมโรค ไม่ใช่การวินิจฉัยของแพทย์</p>
         <div className="flex justify-center pt-1">
           <ShareButtons compact />
         </div>
       </div>
     </div>
+  );
+}
+
+function ConsentCheck({
+  checked,
+  onChange,
+  title,
+  detail,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  title: string;
+  detail: string;
+  disabled?: boolean;
+}) {
+  return (
+    <label className={`flex cursor-pointer items-start gap-2.5 rounded-xl border border-line p-2.5 text-left ${disabled ? "opacity-55" : ""}`}>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} className="mt-0.5 h-4 w-4 accent-brand" />
+      <span>
+        <span className="block text-[13px] font-medium leading-snug">{title}</span>
+        <span className="mt-0.5 block text-[11px] leading-relaxed text-muted">{detail}</span>
+      </span>
+    </label>
   );
 }
 
@@ -601,10 +722,13 @@ function Chip({ children, onClick, active }: { children: React.ReactNode; onClic
   );
 }
 
-function Bubble({ m, showAvatar, onRestart, onSpeak }: { m: Msg; showAvatar: boolean; onRestart: () => void; onSpeak: (text: string) => void }) {
+function Bubble({ m, showAvatar, onRestart, onSpeak, voiceLabel }: { m: Msg; showAvatar: boolean; onRestart: () => void; onSpeak: (text: string) => void; voiceLabel: string }) {
   if (m.from === "user")
     return (
-      <div className="rise ml-auto w-fit max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-brand px-4 py-2.5 text-[16px] text-white">{m.text}</div>
+      <div className="rise ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-sm bg-brand px-4 py-2.5 text-[16px] text-white">
+        <div className="whitespace-pre-wrap">{m.text}</div>
+        <button type="button" onClick={() => onSpeak(`ทวนคำตอบ: ${m.text}`)} className="mt-2 rounded-full border border-white/40 px-3 py-1 text-xs text-white">🔊 ทวนคำตอบ</button>
+      </div>
     );
   if (m.from === "bot")
     return (
@@ -612,7 +736,7 @@ function Bubble({ m, showAvatar, onRestart, onSpeak }: { m: Msg; showAvatar: boo
         <span className="w-8 shrink-0">{showAvatar && <Mascot mood="happy" size={32} />}</span>
         <div className="w-fit max-w-[85%] rounded-2xl rounded-bl-sm bg-surface px-4 py-3 text-[16px] leading-relaxed shadow-sm">
           <div className="whitespace-pre-wrap">{m.text}</div>
-          <button type="button" onClick={() => onSpeak(m.text)} className="mt-2 rounded-full border border-line px-3 py-1 text-xs text-ink-2">🔊 อ่านออกเสียง</button>
+          <button type="button" onClick={() => onSpeak(m.text)} className="mt-2 rounded-full border border-line px-3 py-1 text-xs text-ink-2">{voiceLabel}</button>
         </div>
       </div>
     );
@@ -633,6 +757,7 @@ function Bubble({ m, showAvatar, onRestart, onSpeak }: { m: Msg; showAvatar: boo
               </li>
             ))}
           </ul>
+          <button type="button" onClick={() => onSpeak(`ผมเข้าใจว่าคุณมี ${m.items.map((it) => `${FIELD_LABEL[it.key]} ${it.value}`).join(" และ ")}`)} className="mt-2 rounded-full border border-line bg-surface px-3 py-1 text-xs text-ink-2">🔊 ทวนสิ่งที่เข้าใจ</button>
           <div className="mt-2 text-xs text-muted">ถ้าไม่ถูก กด “เริ่มใหม่” ด้านบนได้เลย</div>
         </div>
       </div>
@@ -640,7 +765,7 @@ function Bubble({ m, showAvatar, onRestart, onSpeak }: { m: Msg; showAvatar: boo
   return (
     <div data-result className="scroll-mt-3">
       <div className="mb-2 flex justify-end">
-        <button type="button" onClick={() => onSpeak(`${m.assessment.urgency === "emergency" ? "ไปห้องฉุกเฉินทันที หรือโทร 1669" : m.assessment.urgency === "urgent" ? "ควรไปพบแพทย์วันนี้" : m.assessment.urgency === "soon" ? "ควรไปพบแพทย์ภายใน 24 ชั่วโมง" : "ผลคัดกรองเบื้องต้น"}. ${m.assessment.clinicalReason}. ผลนี้ไม่ใช่การวินิจฉัย โปรดพบแพทย์หากอาการรุนแรง`) } className="rounded-full border border-line bg-surface px-3 py-1.5 text-sm text-ink-2">🔊 อ่านผลเป็นเสียง</button>
+        <button type="button" onClick={() => onSpeak(`${m.assessment.urgency === "emergency" ? "ไปห้องฉุกเฉินทันที หรือโทร 1669" : m.assessment.urgency === "urgent" ? "ควรไปพบแพทย์วันนี้" : m.assessment.urgency === "soon" ? "ควรไปพบแพทย์ภายใน 24 ชั่วโมง" : "ผลคัดกรองเบื้องต้น"}. ${m.assessment.clinicalReason}. ผลนี้ไม่ใช่การวินิจฉัย โปรดพบแพทย์หากอาการรุนแรง`) } className="rounded-full border border-line bg-surface px-3 py-1.5 text-sm text-ink-2">{voiceLabel}</button>
       </div>
       <ResultCard assessment={m.assessment} answers={m.answers} caseId={m.caseId} onRestart={onRestart} />
     </div>
