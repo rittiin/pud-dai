@@ -1,8 +1,8 @@
 // Keeps only values that match the schema, whatever the source (keyword, AI or client).
 import type { Answers } from "./types";
 
-const SYMS = ["fever", "cough", "sore_throat", "runny_nose", "myalgia", "headache", "fatigue", "chills", "sputum", "diarrhea"];
-const FLAGS = ["dyspnea", "chest_pain", "confusion", "cyanosis", "cannot_drink", "seizure", "worse_again", "high_fever_3d"];
+const SYMS = ["fever", "cough", "sore_throat", "runny_nose", "myalgia", "headache", "fatigue", "chills", "sputum", "diarrhea", "vomiting", "abdominal_pain", "bloody_stool"];
+const FLAGS = ["dyspnea", "chest_pain", "confusion", "cyanosis", "cannot_drink", "seizure", "worse_again", "high_fever_3d", "severe_dehydration"];
 const CHRONIC = ["lung", "heart", "kidney", "liver", "diabetes", "immuno", "cancer", "obesity", "neuro"];
 
 const arr = (v: unknown, allowed: string[]) =>
@@ -32,6 +32,9 @@ export function sanitize(input: Record<string, unknown>): Partial<Answers> {
     hcw: bool(input.hcw),
     vaccinated: oneOf(input.vaccinated, ["yes_1y", "yes_old", "no", "unknown"] as const),
     test: oneOf(input.test, ["none", "rapid_pos_a", "rapid_pos_b", "pcr_pos", "neg"] as const),
+    diseaseFocus: oneOf(input.diseaseFocus, ["flu", "acute_diarrhea", "food_poisoning", "unknown"] as const),
+    stoolCount: num(input.stoolCount, 0, 100),
+    sharedMeal: input.sharedMeal === null ? null : bool(input.sharedMeal),
     province: str(input.province, 40),
     district: str(input.district, 40),
     phone: input.phone === null ? null : str(input.phone, 20),

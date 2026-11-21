@@ -73,11 +73,25 @@ function useSpeech(onText: (t: string) => void) {
   return { supported, listening, toggle };
 }
 
+function speakThai(text: string) {
+  if (typeof window === "undefined" || !window.speechSynthesis || !text) return;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "th-TH";
+  utterance.rate = 0.95;
+  const voice = window.speechSynthesis.getVoices().find((v) => v.lang.toLowerCase().startsWith("th"));
+  if (voice) utterance.voice = voice;
+  window.speechSynthesis.speak(utterance);
+}
+
 export default function Chat() {
   const [answers, setAnswers] = useState<Answers>({});
   const [evidence, setEvidence] = useState<Evidence>({});
   const [msgs, setMsgs] = useState<Msg[]>([]);
-  const [stage, setStage] = useState<"welcome" | "free" | "qa" | "done">("welcome");
+  const [stage, setStage] = useState<"welcome" | "free" | "clarify_term" | "clarify_meaning" | "candidate" | "qa" | "done">("welcome");
+  const [candidateTerm, setCandidateTerm] = useState("");
+  const [candidateMeaning, setCandidateMeaning] = useState("");
+  const [candidateDialect, setCandidateDialect] = useState("unknown");
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [multi, setMulti] = useState<string[]>([]);
@@ -180,11 +194,39 @@ export default function Chat() {
     setInput("");
     push({ from: "user", text });
 
+    if (stage === "clarify_term") {
+      if (/^(ไม่แน่ใจ|ไม่รู้|ข้าม)$/i.test(text)) {
+        push({ from: "bot", text: "ไม่เป็นไรครับ ผมจะไม่เดาความหมายหรือจัดประเภทจากคำนี้ ไปตอบคำถามทีละข้อแทนนะครับ" });
+        setStage("qa");
+        await advance(answers, evidence);
+      } else {
+        setCandidateTerm(text.slice(0, 60));
+        setStage("clarify_meaning");
+        push({ from: "bot", text: `ขอบคุณครับ คำว่า “${text.slice(0, 60)}” หมายถึงอะไรในกรณีนี้ครับ? ถ้าไม่แน่ใจ พิมพ์ “ไม่แน่ใจ” ได้เลย` });
+      }
+      return;
+    }
+    if (stage === "clarify_meaning") {
+      if (/^(ไม่แน่ใจ|ไม่รู้|ข้าม)$/i.test(text)) {
+        setCandidateMeaning("");
+        push({ from: "bot", text: "เข้าใจครับ ผมจะไม่จัดประเภทจากคำนี้ และจะไปถามข้อมูลทีละข้อแทน" });
+        setStage("qa");
+        await advance(answers, evidence);
+      } else {
+        setCandidateMeaning(text.slice(0, 200));
+        setCandidateDialect("unknown");
+        setStage("candidate");
+        push({ from: "bot", text: "ขอบคุณครับ ยังไม่ใช้คำนี้เป็นกฎหรือจัดประเภทโรค หากต้องการ สามารถส่งเฉพาะคำและความหมายนี้เป็นคำเสนอให้ผู้เชี่ยวชาญตรวจได้ โดยไม่แนบบทสนทนาหรือข้อมูลระบุตัวบุคคล" });
+      }
+      return;
+    }
+
     if (stage === "qa" && q && (q.kind === "text" || q.kind === "number")) {
       if (q.kind === "number") {
         const n = parseInt(text.replace(/[^\d]/g, ""));
-        if (!isNaN(n) && n >= 0 && n < 120) {
-          await advance({ ...answers, age: n }, { ...evidence, age: { quote: text, via: "text" } });
+        const max = q.key === "age" ? 120 : 100;
+        if (!isNaN(n) && n >= 0 && n < max) {
+          await advance({ ...answers, [q.key]: n } as Answers, { ...evidence, [q.key]: { quote: text, via: "text" } });
           return;
         }
       } else {
@@ -219,7 +261,11 @@ export default function Chat() {
         push({ from: "bot", text: "ขอโทษครับ ผมยังจับใจความไม่ได้ ลองกดเลือกคำตอบด้านล่างได้เลยครับ" });
         return;
       }
-      if (!items.length && stage === "free") push({ from: "bot", text: "ไม่เป็นไรครับ งั้นผมขอถามทีละข้อนะครับ" });
+      if (!items.length && stage === "free") {
+        setStage("clarify_term");
+        push({ from: "bot", text: "ผมยังจับความหมายไม่ได้ครับ คำหรือวลีไหนที่อยากให้ช่วยทำความเข้าใจครับ? พิมพ์เฉพาะคำนั้นได้เลย หรือพิมพ์ “ไม่แน่ใจ” เพื่อข้าม ผมจะไม่จัดประเภทจนกว่าจะได้ข้อมูลชัดเจน" });
+        return;
+      }
       await advance(merged, ev);
     } finally {
       setBusy(false);
@@ -239,10 +285,35 @@ export default function Chat() {
     setMulti([]);
     setMsgs([]);
     setInput("");
+    setCandidateTerm("");
+    setCandidateMeaning("");
+    setCandidateDialect("unknown");
+  }
+
+  async function submitCandidate() {
+    if (!candidateTerm || !candidateMeaning) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/dialect-candidates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ term: candidateTerm, meaning: candidateMeaning, dialect: candidateDialect, consent: true }),
+      });
+      const data = (await res.json()) as { stored?: boolean };
+      push({ from: "bot", text: data.stored ? "ส่งคำเสนอเพื่อรอตรวจแล้วครับ ยังไม่เพิ่มเข้าอภิธานศัพท์" : "เว็บเดโมสาธารณะยังไม่บันทึกคำเสนอครับ ข้อมูลนี้จะไม่ถูกเก็บไว้" });
+    } catch {
+      push({ from: "bot", text: "ส่งคำเสนอไม่สำเร็จครับ คำนี้ยังไม่ได้ถูกบันทึก" });
+    } finally {
+      setBusy(false);
+      setCandidateTerm("");
+      setCandidateMeaning("");
+      setStage("qa");
+      await advance(answers, evidence);
+    }
   }
 
   const prog = progress(answers);
-  const showInput = stage === "free" || (stage === "qa" && q);
+  const showInput = stage === "free" || stage === "clarify_term" || stage === "clarify_meaning" || (stage === "qa" && q);
 
   if (stage === "welcome") return <Welcome onStart={start} big={big} setBig={setBig} />;
 
@@ -254,7 +325,7 @@ export default function Chat() {
         </Link>
         <div className="min-w-0 flex-1">
           <div className="font-semibold leading-tight">น้องพูดได้</div>
-          <div className="text-xs text-muted">{busy ? "กำลังอ่าน…" : speech.listening ? "กำลังฟัง…" : "ผู้ช่วยประเมินอาการไข้หวัดใหญ่"}</div>
+          <div className="text-xs text-muted">{busy ? "กำลังอ่าน…" : speech.listening ? "กำลังฟัง…" : "ผู้ช่วยคัดกรอง 3 กลุ่มโรค"}</div>
         </div>
         <TextSize big={big} setBig={setBig} />
         <button onClick={restart} className="press rounded-full border border-line px-3 py-1.5 text-sm text-ink-2">
@@ -277,7 +348,7 @@ export default function Chat() {
 
       <main className="flex-1 space-y-3 overflow-y-auto px-4 py-4" aria-live="polite">
         {msgs.map((m, i) => (
-          <Bubble key={m.id} m={m} showAvatar={m.from === "bot" && msgs[i + 1]?.from !== "bot"} onRestart={restart} />
+          <Bubble key={m.id} m={m} showAvatar={m.from === "bot" && msgs[i + 1]?.from !== "bot"} onRestart={restart} onSpeak={speakThai} />
         ))}
         {busy && (
           <div className="rise flex items-end gap-2">
@@ -385,6 +456,20 @@ export default function Chat() {
         </div>
       )}
 
+      {stage === "candidate" && !busy && (
+        <div className="space-y-3 border-t border-line bg-surface px-4 py-3">
+          <div className="text-sm font-medium">ภาษาถิ่นโดยประมาณ (ไม่ทราบก็ได้)</div>
+          <div className="flex flex-wrap gap-2">
+            {[ ["unknown", "ไม่ทราบ"], ["isan", "อีสาน"], ["north", "เหนือ"], ["south", "ใต้"], ["other", "อื่น ๆ"] ].map(([v, label]) => <Chip key={v} active={candidateDialect === v} onClick={() => setCandidateDialect(v)}>{label}</Chip>)}
+          </div>
+          <p className="text-xs leading-relaxed text-muted">ส่งเฉพาะคำ “{candidateTerm}” และความหมายที่ยืนยัน เพื่อรอตรวจ ไม่บันทึกบทสนทนานี้ในคลังคำ เดโมสาธารณะไม่เก็บข้อมูล</p>
+          <div className="flex gap-2">
+            <button onClick={submitCandidate} className="press flex-1 rounded-xl bg-brand py-3 text-sm font-semibold text-white">ยินยอมส่งคำเสนอ</button>
+            <button onClick={() => { setStage("qa"); advance(answers, evidence); }} className="press flex-1 rounded-xl border border-line py-3 text-sm">ไม่ส่ง / ไปต่อ</button>
+          </div>
+        </div>
+      )}
+
       {showInput && (
         <form
           onSubmit={(e) => {
@@ -409,7 +494,7 @@ export default function Chat() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             inputMode={q?.kind === "number" ? "numeric" : "text"}
-            placeholder={speech.listening ? "พูดได้เลยครับ…" : stage === "free" ? "พิมพ์เล่าอาการ…" : (q?.hint ?? "หรือพิมพ์ตอบเองก็ได้…")}
+            placeholder={speech.listening ? "พูดได้เลยครับ…" : stage === "free" ? "พิมพ์เล่าอาการ…" : stage === "clarify_term" ? "พิมพ์คำหรือวลีที่ไม่เข้าใจ…" : stage === "clarify_meaning" ? "พิมพ์ความหมาย หรือ “ไม่แน่ใจ”…" : (q?.hint ?? "หรือพิมพ์ตอบเองก็ได้…")}
             className="h-12 min-w-0 flex-1 rounded-full border border-line bg-bg px-4 text-base outline-none transition-colors focus:border-brand"
           />
           <button
@@ -440,7 +525,7 @@ function Welcome({ onStart, big, setBig }: { onStart: (c: boolean) => void; big:
         <Mascot mood="happy" size={148} float />
         <h1 className="mt-4 text-[26px] font-bold leading-tight">สวัสดีครับ ผมน้องพูดได้</h1>
         <p className="mt-2 max-w-sm text-[17px] leading-relaxed text-ink-2">
-          มีไข้ ไอ เจ็บคอ หรือปวดเมื่อยตัว? เล่าให้ผมฟังสัก 2 นาที แล้วผมจะช่วยบอกว่าควรทำอะไรต่อ
+          มีไข้ ไอ ถ่ายเหลว อาเจียน หรือปวดท้อง? เล่าอาการให้ผมฟัง แล้วผมช่วยคัดกรองเบื้องต้นและแนะนำว่าควรทำอะไรต่อ
         </p>
         <ul className="mt-6 w-full max-w-sm space-y-2.5 text-left">
           {[
@@ -498,7 +583,7 @@ function TextSize({ big, setBig }: { big: boolean; setBig: (b: boolean) => void 
 }
 
 function emptyAssessment(): Assessment {
-  return { meetsClinical: false, clinicalReason: "", classification: "not_case", urgency: "selfcare", highRisk: [], alerts: [] };
+  return { disease: "unknown", surveillanceCode: "—", meetsClinical: false, clinicalReason: "", classification: "not_case", urgency: "selfcare", highRisk: [], alerts: [] };
 }
 
 function Chip({ children, onClick, active }: { children: React.ReactNode; onClick: () => void; active?: boolean }) {
@@ -516,7 +601,7 @@ function Chip({ children, onClick, active }: { children: React.ReactNode; onClic
   );
 }
 
-function Bubble({ m, showAvatar, onRestart }: { m: Msg; showAvatar: boolean; onRestart: () => void }) {
+function Bubble({ m, showAvatar, onRestart, onSpeak }: { m: Msg; showAvatar: boolean; onRestart: () => void; onSpeak: (text: string) => void }) {
   if (m.from === "user")
     return (
       <div className="rise ml-auto w-fit max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-brand px-4 py-2.5 text-[16px] text-white">{m.text}</div>
@@ -525,7 +610,10 @@ function Bubble({ m, showAvatar, onRestart }: { m: Msg; showAvatar: boolean; onR
     return (
       <div className="rise flex items-end gap-2">
         <span className="w-8 shrink-0">{showAvatar && <Mascot mood="happy" size={32} />}</span>
-        <div className="w-fit max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-bl-sm bg-surface px-4 py-3 text-[16px] leading-relaxed shadow-sm">{m.text}</div>
+        <div className="w-fit max-w-[85%] rounded-2xl rounded-bl-sm bg-surface px-4 py-3 text-[16px] leading-relaxed shadow-sm">
+          <div className="whitespace-pre-wrap">{m.text}</div>
+          <button type="button" onClick={() => onSpeak(m.text)} className="mt-2 rounded-full border border-line px-3 py-1 text-xs text-ink-2">🔊 อ่านออกเสียง</button>
+        </div>
       </div>
     );
   if (m.from === "extract")
@@ -551,6 +639,9 @@ function Bubble({ m, showAvatar, onRestart }: { m: Msg; showAvatar: boolean; onR
     );
   return (
     <div data-result className="scroll-mt-3">
+      <div className="mb-2 flex justify-end">
+        <button type="button" onClick={() => onSpeak(`${m.assessment.urgency === "emergency" ? "ไปห้องฉุกเฉินทันที หรือโทร 1669" : m.assessment.urgency === "urgent" ? "ควรไปพบแพทย์วันนี้" : m.assessment.urgency === "soon" ? "ควรไปพบแพทย์ภายใน 24 ชั่วโมง" : "ผลคัดกรองเบื้องต้น"}. ${m.assessment.clinicalReason}. ผลนี้ไม่ใช่การวินิจฉัย โปรดพบแพทย์หากอาการรุนแรง`) } className="rounded-full border border-line bg-surface px-3 py-1.5 text-sm text-ink-2">🔊 อ่านผลเป็นเสียง</button>
+      </div>
       <ResultCard assessment={m.assessment} answers={m.answers} caseId={m.caseId} onRestart={onRestart} />
     </div>
   );

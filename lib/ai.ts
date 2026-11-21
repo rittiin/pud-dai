@@ -4,32 +4,42 @@ import type { Answers, Evidence } from "./types";
 import type { Extraction } from "./extract";
 import { PUBLIC_DEMO_MODE } from "./demo";
 
-const OPENAI = !PUBLIC_DEMO_MODE && !!process.env.OPENAI_API_KEY;
-const TYPHOON = !PUBLIC_DEMO_MODE && !OPENAI && !!process.env.TYPHOON_API_KEY;
-const MODEL = TYPHOON
-  ? process.env.TYPHOON_MODEL || "typhoon-v2.5-30b-a3b-instruct"
-  : process.env.OPENAI_MODEL || "gpt-5-mini";
+type ProviderConfig = { id: string; label: string; apiKey: string; baseURL?: string; model: string; jsonMode?: boolean };
+
+/** Select exactly one OpenAI-compatible provider; never fan out health text to several APIs. */
+function selectProvider(): ProviderConfig | null {
+  if (PUBLIC_DEMO_MODE) return null;
+  const choice = process.env.AI_PROVIDER?.toLowerCase();
+  if (choice === "typhoon") return process.env.TYPHOON_API_KEY ? { id: "typhoon", label: "Typhoon", apiKey: process.env.TYPHOON_API_KEY, baseURL: "https://api.opentyphoon.ai/v1", model: process.env.TYPHOON_MODEL || "typhoon-v2.5-30b-a3b-instruct" } : null;
+  if (choice === "openai") return process.env.OPENAI_API_KEY ? { id: "openai", label: "OpenAI", apiKey: process.env.OPENAI_API_KEY, model: process.env.OPENAI_MODEL || "gpt-5-mini", jsonMode: true } : null;
+  if (choice === "custom") return process.env.AI_API_KEY && process.env.AI_BASE_URL ? { id: "custom", label: "OpenAI-compatible API", apiKey: process.env.AI_API_KEY, baseURL: process.env.AI_BASE_URL, model: process.env.AI_MODEL || "default" } : null;
+  if (process.env.TYPHOON_API_KEY) return { id: "typhoon", label: "Typhoon", apiKey: process.env.TYPHOON_API_KEY, baseURL: "https://api.opentyphoon.ai/v1", model: process.env.TYPHOON_MODEL || "typhoon-v2.5-30b-a3b-instruct" };
+  if (process.env.OPENAI_API_KEY) return { id: "openai", label: "OpenAI", apiKey: process.env.OPENAI_API_KEY, model: process.env.OPENAI_MODEL || "gpt-5-mini", jsonMode: true };
+  if (process.env.AI_API_KEY && process.env.AI_BASE_URL) return { id: "custom", label: "OpenAI-compatible API", apiKey: process.env.AI_API_KEY, baseURL: process.env.AI_BASE_URL, model: process.env.AI_MODEL || "default" };
+  return null;
+}
+
+const PROVIDER = selectProvider();
 
 export function aiEnabled(): boolean {
-  return !PUBLIC_DEMO_MODE && (TYPHOON || !!process.env.OPENAI_API_KEY);
+  return PROVIDER !== null;
 }
 
 export function aiProvider(): string {
-  return `${TYPHOON ? "Typhoon" : "OpenAI"} (${MODEL})`;
+  return PROVIDER ? `${PROVIDER.label} (${PROVIDER.model})` : "ไม่ได้เปิดใช้ API ภายนอก";
 }
 
 function client() {
-  return TYPHOON
-    ? new OpenAI({ apiKey: process.env.TYPHOON_API_KEY, baseURL: "https://api.opentyphoon.ai/v1" })
-    : new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  if (!PROVIDER) throw new Error("No AI provider configured");
+  return new OpenAI({ apiKey: PROVIDER.apiKey, baseURL: PROVIDER.baseURL });
 }
 
 function requestOptions(json: boolean) {
-  return TYPHOON
-    ? { max_tokens: 2048, temperature: json ? 0.1 : 0.4 }
-    : json
-      ? { response_format: { type: "json_object" as const } }
-      : {};
+  return {
+    max_tokens: 2048,
+    temperature: json ? 0.1 : 0.4,
+    ...(json && PROVIDER?.jsonMode ? { response_format: { type: "json_object" as const } } : {}),
+  };
 }
 
 /** Pulls the first JSON object out of a reply that may be wrapped in ``` fences or prose. */
@@ -45,7 +55,7 @@ function parseJson(text: string): Record<string, unknown> {
   }
 }
 
-const EXTRACT_SYSTEM = `คุณคือผู้ช่วยดึงข้อมูลสำหรับการคัดกรองไข้หวัดใหญ่ ตามแบบสอบสวน SARI_AI ของกรมควบคุมโรค
+const EXTRACT_SYSTEM = `คุณคือผู้ช่วยดึงข้อมูลสำหรับคัดกรองไข้หวัดใหญ่ อุจจาระร่วงเฉียบพลัน และอาหารเป็นพิษ
 หน้าที่: อ่านข้อความภาษาไทยที่ประชาชนพิมพ์ แล้วดึงเฉพาะข้อมูลที่ "ระบุไว้ชัดเจน" เป็น JSON
 ห้ามเดา ห้ามอนุมาน ห้ามวินิจฉัย ถ้าไม่ได้พูดถึง ให้ไม่ใส่ field นั้นเลย
 
@@ -57,11 +67,14 @@ const EXTRACT_SYSTEM = `คุณคือผู้ช่วยดึงข้�
 - ความดันโลหิตสูง ไม่ใช่โรคหัวใจ ห้าม map เป็น "heart" (ไม่มีค่าสำหรับความดันในรายการ ให้ข้ามไป)
 
 field ที่อนุญาต (ใส่เฉพาะที่มีหลักฐาน):
-- symptoms: array ของ "fever","cough","sore_throat","runny_nose","myalgia","headache","fatigue","chills","sputum","diarrhea"
+- symptoms: array ของ "fever","cough","sore_throat","runny_nose","myalgia","headache","fatigue","chills","sputum","diarrhea","vomiting","abdominal_pain","bloody_stool"
+- diseaseFocus: "flu" | "acute_diarrhea" | "food_poisoning" | "unknown" (ใส่เฉพาะเมื่อผู้ใช้ระบุโรคที่ต้องการคัดกรองชัดเจน ห้ามอนุมานจากอาการ)
+- stoolCount: number (จำนวนครั้งที่ถ่ายใน 24 ชั่วโมง ต้องมีตัวเลขในคำพูด)
+- sharedMeal: boolean (รับประทานอาหารมื้อเดียวกันกับผู้ป่วยอื่นที่มีอาการคล้ายกัน)
 - feverTemp: number (องศาเซลเซียส)
 - onsetDate: "YYYY-MM-DD" (คำนวณจากวันนี้ที่ให้มา เช่น "เมื่อวาน")
 - status: "sick" | "better" | "recovered"
-- redFlags: array ของ "dyspnea","chest_pain","confusion","cyanosis","cannot_drink","seizure","worse_again","high_fever_3d"
+- redFlags: array ของ "dyspnea","chest_pain","confusion","cyanosis","cannot_drink","seizure","worse_again","high_fever_3d","severe_dehydration"
 - age: number (ปี ของผู้ป่วย ถ้าผู้พิมพ์ตอบแทนคนอื่น ให้ใช้อายุผู้ป่วย)
 - sex: "M" | "F"
 - pregnant: boolean
@@ -97,7 +110,7 @@ const norm = (s: string) => s.replace(/\s+/g, "").replace(/ํา/g, "ำ");
 /** AI extraction with a grounding check: any field whose quote is not literally in the user's text is dropped. */
 export async function aiExtract(text: string, today: string, context?: string): Promise<Extraction & { dropped: string[] }> {
   const res = await client().chat.completions.create({
-    model: MODEL,
+    model: PROVIDER!.model,
     ...requestOptions(true),
     messages: [
       { role: "system", content: EXTRACT_SYSTEM },
@@ -136,7 +149,7 @@ export async function aiExtract(text: string, today: string, context?: string): 
 
 export async function aiReport(facts: string): Promise<string> {
   const res = await client().chat.completions.create({
-    model: MODEL,
+    model: PROVIDER!.model,
     ...requestOptions(false),
     messages: [
       {

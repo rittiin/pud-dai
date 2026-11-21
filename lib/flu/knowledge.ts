@@ -36,6 +36,33 @@ export const CASE_DEFINITION = {
     "แพร่เชื้อได้ตั้งแต่ 1 วันก่อนมีอาการ ถึง 3–5 วันหลังมีอาการในผู้ใหญ่ ส่วนในเด็กอาจนานกว่า 7 วัน",
 };
 
+/** Official disease-code references used in this demo. */
+export const DISEASE_SOURCES = {
+  definitions: {
+    label: "กรมควบคุมโรค: นิยามโรคและแนวทางการรายงานโรค (รหัส 506)",
+    url: "https://ddc.moph.go.th/uploads/publish/1142920210518092542.pdf",
+  },
+  diarrhea: {
+    label: "กรมควบคุมโรค: แนวทางเฝ้าระวังโรคอุจจาระร่วง",
+    url: "https://ddc.moph.go.th/uploads/ckeditor2/files/หนังสือเรียนสำนักอนามัยส่งแนวทาง_09012568.pdf",
+  },
+} as const;
+
+export const DISEASE_CATALOG = {
+  flu: { label: "ไข้หวัดใหญ่", code: "506 15", clinical: CASE_DEFINITION.clinical },
+  acute_diarrhea: {
+    label: "อุจจาระร่วงเฉียบพลัน",
+    code: "506 02",
+    clinical: "ถ่ายเหลวอย่างน้อย 3 ครั้งใน 24 ชั่วโมง หรือถ่ายเป็นมูกเลือดอย่างน้อย 1 ครั้ง",
+  },
+  food_poisoning: {
+    label: "อาหารเป็นพิษ",
+    code: "506 03",
+    clinical: "มีอาการทางเดินอาหารหลังรับประทานอาหารร่วมกัน หรือมีผู้ป่วยอาการคล้ายกันที่มีประวัติรับประทานอาหารร่วมกัน เป็นเพียงเกณฑ์คัดกรองเพื่อสอบสวน ไม่ใช่การยืนยันเชื้อ",
+  },
+  unknown: { label: "ยังไม่แน่ใจ", code: "—", clinical: "ยังระบุโรคจากข้อมูลที่ให้ไม่ได้" },
+} as const;
+
 /** Symptoms that may accompany fever + cough for the clinical criterion. */
 export const COMPANION_SYMS: Sym[] = ["sore_throat", "runny_nose", "myalgia", "headache", "fatigue"];
 
@@ -50,6 +77,9 @@ export const SYM_LABEL: Record<Sym, string> = {
   chills: "หนาวสั่น",
   sputum: "มีเสมหะ",
   diarrhea: "ถ่ายเหลว",
+  vomiting: "อาเจียน",
+  abdominal_pain: "ปวดท้อง",
+  bloody_stool: "ถ่ายมีมูกเลือด",
 };
 
 export const RED_FLAG_LABEL: Record<RedFlag, string> = {
@@ -61,10 +91,11 @@ export const RED_FLAG_LABEL: Record<RedFlag, string> = {
   seizure: "ชัก",
   worse_again: "อาการดีขึ้นแล้วกลับแย่ลงใหม่ ไข้กลับมา ไอหนักขึ้น",
   high_fever_3d: "ไข้สูงไม่ลดเกิน 3 วัน",
+  severe_dehydration: "มีอาการขาดน้ำรุนแรง เช่น ซึมมาก ปากแห้งมาก ปัสสาวะน้อยมาก",
 };
 
 /** Red flags requiring emergency care right away (vs. "see a doctor today"). */
-export const EMERGENCY_FLAGS: RedFlag[] = ["dyspnea", "chest_pain", "confusion", "cyanosis", "seizure", "cannot_drink"];
+export const EMERGENCY_FLAGS: RedFlag[] = ["dyspnea", "chest_pain", "confusion", "cyanosis", "seizure", "cannot_drink", "severe_dehydration"];
 
 export const CHRONIC_LABEL: Record<Chronic, string> = {
   lung: "โรคปอดเรื้อรัง/หอบหืด",
@@ -93,6 +124,17 @@ export const ADVICE = {
     "ล้างมือด้วยสบู่อย่างน้อย 20 วินาที หรือใช้เจลแอลกอฮอล์ โดยเฉพาะหลังไอจามและก่อนจับอาหาร",
     "แยกแก้วน้ำ ช้อน ผ้าเช็ดหน้า และถ้าทำได้ให้นอนแยกห้อง เปิดหน้าต่างให้อากาศถ่ายเท",
     "เลี่ยงการอยู่ใกล้ผู้สูงอายุ เด็กเล็ก หญิงตั้งครรภ์ และผู้มีโรคประจำตัวในบ้าน ถ้าคนกลุ่มนี้เริ่มมีไข้ ควรพาไปพบแพทย์เร็ว",
+  ],
+  giSelfCare: [
+    "จิบน้ำสะอาดหรือสารละลายเกลือแร่ ORS ที่ผสมตามฉลาก เพื่อชดเชยน้ำที่เสียไป",
+    "กินอาหารปรุงสุกใหม่และพักผ่อน หลีกเลี่ยงการเตรียมอาหารให้ผู้อื่นระหว่างมีอาการ",
+    "ไม่ควรซื้อยาหยุดถ่ายหรือยาปฏิชีวนะกินเอง โดยเฉพาะเมื่อมีไข้หรือถ่ายเป็นมูกเลือด",
+    "ไปพบแพทย์หากถ่ายเป็นน้ำมาก อาเจียนมาก ปัสสาวะน้อย ซึม ดื่มน้ำไม่ได้ หรืออาการแย่ลง",
+  ],
+  giProtect: [
+    "ล้างมือด้วยสบู่หลังเข้าห้องน้ำและก่อนเตรียมหรือรับประทานอาหาร",
+    "ใช้ช้อนกลาง แยกอุปกรณ์สัมผัสอาหารดิบและอาหารสุก และเก็บอาหารให้ถูกสุขลักษณะ",
+    "หากมีผู้ป่วยหลายคนหลังรับประทานอาหารร่วมกัน ให้จดชื่ออาหารและเวลาที่รับประทานเพื่อแจ้งเจ้าหน้าที่ โดยไม่ส่งข้อมูลระบุตัวบุคคลในเดโม",
   ],
   recovered: [
     "ถ้าไม่มีไข้มาแล้วอย่างน้อย 24 ชั่วโมงโดยไม่ได้กินยาลดไข้ กลับไปทำงานหรือเรียนได้ แต่ควรสวมหน้ากากต่ออีก 2–3 วันถ้ายังไอ",

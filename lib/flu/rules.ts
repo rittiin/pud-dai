@@ -1,7 +1,7 @@
 // Deterministic rules. AI never decides classification or urgency — these functions do,
 // and each one is traceable to the DDC case definition (see knowledge.ts).
-import type { Alert, Answers, Assessment, Classification, Urgency } from "../types";
-import { CHRONIC_LABEL, COMPANION_SYMS, EMERGENCY_FLAGS, SYM_LABEL } from "./knowledge";
+import type { Alert, Answers, Assessment, Classification, DiseaseFocus, Urgency } from "../types";
+import { CHRONIC_LABEL, COMPANION_SYMS, DISEASE_CATALOG, EMERGENCY_FLAGS, SYM_LABEL } from "./knowledge";
 
 export function todayISO(d = new Date()): string {
   const y = d.getFullYear();
@@ -30,9 +30,23 @@ export function thaiDate(iso?: string): string {
   return `${d} ${TH_MONTHS[m - 1]} ${String(y + 543).slice(2)}`;
 }
 
-/** Clinical criterion: fever + cough + at least one companion symptom. */
+/** Each pattern is a screening rule, not a diagnosis. */
 export function clinicalCriteria(a: Answers): { meets: boolean; reason: string } {
   const s = a.symptoms ?? [];
+  const focus = a.diseaseFocus ?? "flu";
+  if (focus === "unknown") {
+    const anySymptom = s.length > 0;
+    return { meets: anySymptom, reason: anySymptom ? "มีอาการที่ผู้ใช้รายงาน · ยังไม่จัดเข้ากลุ่มโรค" : "ไม่พบอาการในรายการ" };
+  }
+  if (focus === "acute_diarrhea") {
+    const meets = (a.stoolCount ?? 0) >= 3 || s.includes("bloody_stool");
+    return { meets, reason: `ถ่ายเหลว ${a.stoolCount === undefined ? "ยังไม่ทราบจำนวน" : `${a.stoolCount} ครั้ง/24 ชม.`} · ถ่ายมูกเลือด ${s.includes("bloody_stool") ? "มี" : "ไม่มี/ไม่ระบุ"}` };
+  }
+  if (focus === "food_poisoning") {
+    const hasGiSymptom = s.some((x) => ["diarrhea", "vomiting", "abdominal_pain"].includes(x));
+    const meets = hasGiSymptom && a.sharedMeal === true;
+    return { meets, reason: `อาการทางเดินอาหาร ${hasGiSymptom ? "มี" : "ไม่มี/ไม่ระบุ"} · รับประทานอาหารร่วมกับผู้ป่วยอื่น ${a.sharedMeal === true ? "ใช่" : a.sharedMeal === false ? "ไม่ใช่" : "ยังไม่ทราบ"} · ต้องให้เจ้าหน้าที่สอบสวน` };
+  }
   const hasFever = s.includes("fever");
   const hasCough = s.includes("cough");
   const companions = COMPANION_SYMS.filter((x) => s.includes(x));
@@ -56,15 +70,21 @@ export function highRiskReasons(a: Answers): string[] {
 
 export function assess(a: Answers, today = todayISO()): Assessment {
   const { meets, reason } = clinicalCriteria(a);
+  const focus = a.diseaseFocus ?? "flu";
+  const test = a.test ?? "none";
+  const testDisease: DiseaseFocus | undefined = ["pcr_pos", "rapid_pos_a", "rapid_pos_b"].includes(test) ? "flu" : undefined;
+  const disease: DiseaseFocus = focus === "unknown" && testDisease ? testDisease : focus;
   const highRisk = highRiskReasons(a);
   const s = a.symptoms ?? [];
   const flags = a.redFlags ?? [];
   const respiratory = s.includes("fever") || s.includes("cough");
 
   let classification: Classification = "not_case";
-  if (meets) {
-    if (a.test === "pcr_pos") classification = "confirmed";
-    else if (a.test === "rapid_pos_a" || a.test === "rapid_pos_b") classification = "probable";
+  if (meets || testDisease === disease) {
+    const matchingPositive = disease === "flu" && ["pcr_pos", "rapid_pos_a", "rapid_pos_b"].includes(test);
+    const confirmatory = test === "pcr_pos";
+    if (matchingPositive && confirmatory) classification = "confirmed";
+    else if (matchingPositive && disease === "flu") classification = "probable";
     else classification = "suspected";
   }
 
@@ -97,13 +117,24 @@ export function assess(a: Answers, today = todayISO()): Assessment {
 
   let contagiousUntil: string | undefined;
   let hoursSinceOnset: number | undefined;
-  if (a.onsetDate) {
+  if (a.onsetDate && disease === "flu") {
     const child = a.age !== undefined && a.age < 12;
     contagiousUntil = addDays(a.onsetDate, child ? 7 : 5);
     hoursSinceOnset = Math.max(0, daysBetween(a.onsetDate, today) * 24);
   }
 
-  return { meetsClinical: meets, clinicalReason: reason, classification, urgency, highRisk, alerts, contagiousUntil, hoursSinceOnset };
+  return {
+    disease,
+    surveillanceCode: DISEASE_CATALOG[disease].code,
+    meetsClinical: meets,
+    clinicalReason: reason,
+    classification,
+    urgency,
+    highRisk,
+    alerts,
+    contagiousUntil,
+    hoursSinceOnset,
+  };
 }
 
 export const CLASS_LABEL: Record<Classification, string> = {

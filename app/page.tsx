@@ -9,11 +9,11 @@ export default function Home() {
       <div className="stagger mb-8">
         <Mascot mood="happy" size={96} float />
         <div className="mb-3 mt-4 inline-flex items-center gap-2 rounded-full bg-brand-soft px-3 py-1 text-xs font-semibold text-brand">
-          ต้นแบบ · ไข้หวัดใหญ่ (ICD-10 J10–J11)
+          ต้นแบบ · คัดกรอง 3 กลุ่มโรค
         </div>
         <h1 className="text-4xl font-bold tracking-tight">พูดได้ <span className="text-2xl font-semibold text-muted">Pud-dai</span></h1>
         <p className="mt-3 max-w-xl text-lg leading-relaxed text-ink-2">
-          ประชาชนเล่าอาการด้วยภาษาของตัวเอง แล้วได้คำแนะนำที่ทำตามได้จริงทันที ข้อมูลเดียวกันส่งต่อเป็น line list ที่ตรวจสอบหลักฐานได้ทุกช่อง
+          ประชาชนเล่าอาการด้วยภาษาของตัวเอง แล้วได้คำแนะนำคัดกรองเบื้องต้นสำหรับไข้หวัดใหญ่ อุจจาระร่วงเฉียบพลัน และอาหารเป็นพิษ ข้อมูลที่แสดงใน line list มีหลักฐานจากคำตอบ
           ให้ทีมเฝ้าระวังเห็นกลุ่มก้อนตั้งแต่วันแรก
         </p>
       </div>
@@ -22,7 +22,7 @@ export default function Home() {
         <Link href="/screen" className="press lift group rounded-2xl bg-brand p-6 text-white shadow-sm ">
           <div className="text-sm opacity-80">สำหรับประชาชน</div>
           <div className="mt-1 text-2xl font-bold">ประเมินอาการ</div>
-          <p className="mt-2 text-sm leading-relaxed opacity-90">มีไข้ ไอ เจ็บคอ? คุยกับพูดได้ประมาณ 2 นาที แล้วรู้ว่าต้องไปหาหมอไหม ต้องหยุดงานถึงวันไหน และดูแลคนในบ้านอย่างไร</p>
+          <p className="mt-2 text-sm leading-relaxed opacity-90">มีไข้ ไอ ถ่ายเหลว หรืออาเจียน? คุยกับพูดได้เพื่อรับคำแนะนำคัดกรองเบื้องต้น</p>
           <div className="mt-4 text-sm font-semibold">เริ่มเลย →</div>
         </Link>
         <Link href="/dashboard" className="press lift group rounded-2xl border border-line bg-surface p-6 shadow-sm ">

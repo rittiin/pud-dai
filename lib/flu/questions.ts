@@ -20,8 +20,8 @@ export interface Question {
   formRef: string; // which part of the SARI_AI 2 form this question fills
 }
 
-const symOrder: Sym[] = ["fever", "cough", "sore_throat", "runny_nose", "myalgia", "headache", "fatigue", "chills", "sputum", "diarrhea"];
-const flagOrder: RedFlag[] = ["dyspnea", "chest_pain", "confusion", "cyanosis", "cannot_drink", "seizure", "worse_again", "high_fever_3d"];
+const symOrder: Sym[] = ["fever", "cough", "sore_throat", "runny_nose", "myalgia", "headache", "fatigue", "chills", "sputum", "diarrhea", "vomiting", "abdominal_pain", "bloody_stool"];
+const flagOrder: RedFlag[] = ["dyspnea", "chest_pain", "confusion", "cyanosis", "cannot_drink", "seizure", "worse_again", "high_fever_3d", "severe_dehydration"];
 const chronicOrder: Chronic[] = ["lung", "heart", "diabetes", "kidney", "liver", "immuno", "cancer", "obesity", "neuro"];
 
 const sick = (a: Answers) => a.consent === true && (a.symptoms?.length ?? 0) > 0;
@@ -36,7 +36,7 @@ export const QUESTIONS: Question[] = [
     kind: "single",
     formRef: "PDPA",
     prompt: () =>
-      "สวัสดีครับ ผมชื่อ “พูดได้” ผู้ช่วยประเมินอาการไข้หวัดใหญ่ของกรมควบคุมโรค (ต้นแบบ)\n\nคำตอบของคุณจะใช้เพื่อให้คำแนะนำ และส่งให้เจ้าหน้าที่ควบคุมโรคใช้เฝ้าระวังการระบาดในพื้นที่ ข้อมูลจะไม่ถูกเปิดเผยเป็นรายบุคคล\n\nยินยอมให้ใช้ข้อมูลไหมครับ?",
+      "สวัสดีครับ ผมชื่อน้องพูดได้ ต้นแบบคัดกรอง 3 โรค: ไข้หวัดใหญ่ อุจจาระร่วงเฉียบพลัน และอาหารเป็นพิษ\n\nระบบเดโมสาธารณะปิดการเรียก AI ภายนอกและไม่บันทึกรายงาน อย่ากรอกชื่อ เลขบัตร หรือข้อมูลที่ระบุตัวบุคคลได้ หากนำระบบไปเปิดใช้งานจริง ผู้ดูแลต้องแจ้งวัตถุประสงค์ ระยะเวลาเก็บข้อมูล และผู้ให้บริการที่ประมวลผลก่อนขอความยินยอม\n\nคำศัพท์ภาษาถิ่นจะไม่ถูกเก็บจากบทสนทนา หากต้องการส่งคำเสนอให้ตรวจ จะถามความยินยอมแยกต่างหากครับ\n\nยินยอมให้ใช้คำตอบเพื่อการคัดกรองในเดโมไหมครับ?",
     options: [
       { label: "ยินยอม เริ่มเลย", value: true },
       { label: "ไม่ยินยอม", value: false },
@@ -44,12 +44,41 @@ export const QUESTIONS: Question[] = [
     ask: () => true,
   },
   {
+    key: "diseaseFocus",
+    kind: "single",
+    formRef: "เป้าหมายการคัดกรอง (ไม่ใช่การวินิจฉัย)",
+    prompt: () => "ต้องการคัดกรองกลุ่มโรคใดครับ? อาการเป็นเพียงข้อมูลเบื้องต้น ไม่ใช่การวินิจฉัย",
+    options: [
+      { label: "ไข้หวัดใหญ่", value: "flu" },
+      { label: "อุจจาระร่วงเฉียบพลัน", value: "acute_diarrhea" },
+      { label: "อาหารเป็นพิษ", value: "food_poisoning" },
+      { label: "ไม่แน่ใจ", value: "unknown" },
+    ],
+    ask: (a) => a.consent === true,
+  },
+  {
     key: "symptoms",
     kind: "multi",
     formRef: "2.2 อาการและอาการแสดง",
-    prompt: () => "ตอนนี้หรือช่วงที่ป่วย มีอาการอะไรบ้างครับ (เลือกได้หลายข้อ)",
+    prompt: (a) => a.diseaseFocus === "flu" ? "ตอนนี้หรือช่วงที่ป่วย มีอาการอะไรบ้างครับ (เลือกได้หลายข้อ)" : "ตอนนี้หรือช่วงที่ป่วย มีอาการอะไรบ้างครับ โดยเฉพาะอาการทางท้อง (เลือกได้หลายข้อ)",
     options: [...symOrder.map((s) => ({ label: SYM_LABEL[s], value: s })), { label: "ไม่มีอาการเหล่านี้", value: "__none", exclusive: true }],
     ask: (a) => a.consent === true,
+  },
+  {
+    key: "stoolCount",
+    kind: "number",
+    formRef: "จำนวนครั้งที่ถ่ายเหลวใน 24 ชั่วโมง",
+    prompt: () => "ใน 24 ชั่วโมงที่ผ่านมา ถ่ายเหลวกี่ครั้งครับ?",
+    hint: "จำนวนครั้ง เช่น 3",
+    ask: (a) => sick(a) && a.diseaseFocus === "acute_diarrhea" && (a.symptoms ?? []).includes("diarrhea"),
+  },
+  {
+    key: "sharedMeal",
+    kind: "single",
+    formRef: "ประวัติรับประทานอาหารร่วมกัน",
+    prompt: () => "ก่อนเริ่มป่วย ได้รับประทานอาหารมื้อเดียวกันกับคนอื่นที่มีอาการคล้ายกันไหมครับ?",
+    options: [{ label: "ใช่", value: true }, { label: "ไม่ใช่", value: false }, { label: "ไม่แน่ใจ", value: null }],
+    ask: (a) => sick(a) && a.diseaseFocus === "food_poisoning" && (a.symptoms ?? []).some((s) => ["diarrhea", "vomiting", "abdominal_pain"].includes(s)),
   },
   {
     key: "onsetDate",
@@ -73,7 +102,7 @@ export const QUESTIONS: Question[] = [
   {
     key: "redFlags",
     kind: "multi",
-    formRef: "สัญญาณอันตราย (ปอดอักเสบแทรกซ้อน)",
+    formRef: "สัญญาณอันตราย",
     prompt: () => "มีอาการต่อไปนี้ไหมครับ ข้อนี้สำคัญมาก",
     options: [...flagOrder.map((f) => ({ label: RED_FLAG_LABEL[f], value: f })), { label: "ไม่มีเลย", value: "__none", exclusive: true }],
     ask: (a) => sick(a) && a.status !== "recovered",
@@ -160,7 +189,7 @@ export const QUESTIONS: Question[] = [
     formRef: "6.1–6.3 สัมผัสสัตว์ปีก",
     prompt: () => "ช่วง 14 วันก่อนป่วย ได้จับ ชำแหละ หรืออยู่ใกล้ไก่ เป็ด หรือนกที่ป่วยหรือตายผิดปกติไหมครับ",
     options: yesNo,
-    ask: sick,
+    ask: (a) => sick(a) && a.diseaseFocus === "flu",
   },
   {
     key: "travel",
@@ -168,7 +197,7 @@ export const QUESTIONS: Question[] = [
     formRef: "6.5 เดินทางจากพื้นที่ระบาด",
     prompt: () => "ช่วง 14 วันก่อนป่วย เดินทางไปต่างประเทศหรือพื้นที่ที่มีการระบาดไหมครับ",
     options: yesNo,
-    ask: sick,
+    ask: (a) => sick(a) && a.diseaseFocus === "flu",
   },
   {
     key: "hcw",
@@ -179,7 +208,7 @@ export const QUESTIONS: Question[] = [
       { label: "ไม่ใช่", value: false },
       { label: "ใช่", value: true },
     ],
-    ask: sick,
+    ask: (a) => sick(a) && a.diseaseFocus === "flu",
   },
   {
     key: "vaccinated",
@@ -192,21 +221,21 @@ export const QUESTIONS: Question[] = [
       { label: "ไม่เคยฉีด", value: "no" },
       { label: "จำไม่ได้", value: "unknown" },
     ],
-    ask: sick,
+    ask: (a) => sick(a) && a.diseaseFocus === "flu",
   },
   {
     key: "test",
     kind: "single",
     formRef: "3.10 ผลตรวจทางห้องปฏิบัติการ",
-    prompt: () => "ได้ตรวจหาเชื้อไข้หวัดใหญ่แล้วหรือยังครับ",
+    prompt: () => "ได้รับผลตรวจไข้หวัดใหญ่หรือยังครับ",
     options: [
       { label: "ยังไม่ได้ตรวจ", value: "none" },
       { label: "ชุดตรวจเร็ว: เจอสายพันธุ์ A", value: "rapid_pos_a" },
       { label: "ชุดตรวจเร็ว: เจอสายพันธุ์ B", value: "rapid_pos_b" },
-      { label: "โรงพยาบาลยืนยันด้วย RT-PCR", value: "pcr_pos" },
+      { label: "โรงพยาบาลยืนยันไข้หวัดใหญ่ด้วย RT-PCR", value: "pcr_pos" },
       { label: "ตรวจแล้วไม่เจอเชื้อ", value: "neg" },
     ],
-    ask: sick,
+    ask: (a) => sick(a) && a.diseaseFocus === "flu",
   },
   {
     key: "province",

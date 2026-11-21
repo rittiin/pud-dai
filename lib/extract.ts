@@ -1,5 +1,5 @@
 // Turns free Thai text ("ไข้ 39 ไอ ปวดตัว เริ่มเมื่อวาน ที่โรงเรียนเป็นหลายคน") into structured answers.
-// Keyword mode works offline; AI mode (lib/ai.ts) is used when OPENAI_API_KEY is set.
+// Keyword mode works offline; AI mode (lib/ai.ts) uses the configured OpenAI or Typhoon provider.
 // Both modes must return a verbatim quote as evidence for every field.
 import type { Answers, Chronic, Evidence, RedFlag, Sym } from "./types";
 import { addDays, todayISO } from "./flu/rules";
@@ -17,17 +17,32 @@ function quoteAround(text: string, m: RegExpMatchArray): string {
 }
 
 const SYM_RX: [Sym, RegExp][] = [
-  ["fever", /ไข้(?!หวัด)|ตัวร้อน|มีไข้|ไข้หวัด/],
+  ["fever", /ไข้(?!หวัด)|ตัวร้อน|ตัวฮ้อน|มีไข้|ไข้หวัด/],
   ["cough", /ไอ(?!ที)/],
   ["sore_throat", /เจ็บคอ|แสบคอ|คอแห้ง|กลืนเจ็บ/],
   ["runny_nose", /น้ำมูก|น้ํามูก|คัดจมูก|จมูกตัน/],
-  ["myalgia", /ปวดเมื่อย|ปวดตัว|เมื่อยตัว|ปวดกล้ามเนื้อ|ปวดตามตัว|ปวดเนื้อปวดตัว/],
-  ["headache", /ปวดหัว|ปวดศีรษะ|ปวดศรีษะ|มึนหัว/],
-  ["fatigue", /อ่อนเพลีย|เพลีย|ไม่มีแรง|หมดแรง|อ่อนแรง/],
+  ["myalgia", /ปวดแข้งปวดขา|ปวดแขนขา|ปวดเมื่อย|ปวดตัว|เมื่อยตัว|ปวดกล้ามเนื้อ|ปวดตามตัว|ปวดเนื้อปวดตัว/],
+  ["headache", /เจ็บหัว|ปวดหัว|ปวดศีรษะ|ปวดศรีษะ|มึนหัว/],
+  ["fatigue", /บ่มีแฮง|ไม่มีแฮง|บ่มีแรง|อ่อนเพลีย|เพลีย|ไม่มีแรง|หมดแรง|อ่อนแรง/],
   ["chills", /หนาวสั่น|หนาวๆร้อนๆ|หนาว ๆ ร้อน ๆ/],
   ["sputum", /เสมหะ|เสลด/],
-  ["diarrhea", /ท้องเสีย|ถ่ายเหลว/],
+  ["diarrhea", /ท้องเสีย|ถ่ายเหลว|ท้องร่วง|ถ่ายเป็นน้ำ/],
+  ["vomiting", /อาเจียน|อ้วก|อ๊วก/],
+  ["abdominal_pain", /ปวดท้อง|เจ็บท้อง|จุกท้อง/],
+  ["bloody_stool", /ถ่าย.{0,5}(มูกเลือด|เลือดปน)|มูกเลือด.{0,5}ถ่าย/],
 ];
+
+const NEGATED_SYMPTOM_PREFIX = /(?:ไม่(?:ได้|ค่อยมี|มี|เป็น)?|ไม่มี|บ่(?:ได้|มี|เป็น|ค่อยมี)?|บ่ค่อย)\s*$/;
+
+function findAffirmedMatch(text: string, rx: RegExp): RegExpMatchArray | null {
+  const scan = new RegExp(rx.source, `${rx.flags.replace(/[gy]/g, "")}g`);
+  let m: RegExpExecArray | null;
+  while ((m = scan.exec(text))) {
+    const prefix = text.slice(Math.max(0, m.index - 12), m.index);
+    if (!NEGATED_SYMPTOM_PREFIX.test(prefix)) return m;
+  }
+  return null;
+}
 
 const FLAG_RX: [RedFlag, RegExp][] = [
   ["dyspnea", /หายใจ(ลำบาก|ไม่ทัน|ไม่อิ่ม|ไม่สะดวก|เหนื่อย)|หอบ/],
@@ -35,6 +50,7 @@ const FLAG_RX: [RedFlag, RegExp][] = [
   ["confusion", /ซึม|สับสน|ปลุกไม่ตื่น/],
   ["cyanosis", /ปากเขียว|ตัวเขียว|ปลายมือเขียว/],
   ["cannot_drink", /กินไม่ได้|ดื่มน้ำไม่ได้|กินข้าวไม่ได้/],
+  ["severe_dehydration", /ปากแห้งมาก|ปัสสาวะ(น้อยมาก|ไม่ออก)|ซึมมาก.{0,5}(ขาดน้ำ|ถ่าย)|ขาดน้ำรุนแรง/],
   ["seizure", /ชัก/],
 ];
 
@@ -53,16 +69,23 @@ export function keywordExtract(text: string, today = todayISO()): Extraction {
   const t = text.replace(/\s+/g, " ").trim();
   const answers: Partial<Answers> = {};
   const evidence: Evidence = {};
+  let m: RegExpMatchArray | null;
   const set = <K extends keyof Answers>(k: K, v: Answers[K], m: RegExpMatchArray) => {
     answers[k] = v;
     evidence[k] = { quote: quoteAround(t, m), via: "text" };
   };
 
+  const diseaseMatch = t.match(/อาหารเป็นพิษ/) ?? t.match(/อุจจาระร่วงเฉียบพลัน|ท้องเสียเฉียบพลัน/) ?? t.match(/ไข้หวัดใหญ่/);
+  if (diseaseMatch) {
+    const focus = /อาหารเป็นพิษ/.test(diseaseMatch[0]) ? "food_poisoning" : /อุจจาระร่วง|ท้องเสีย/.test(diseaseMatch[0]) ? "acute_diarrhea" : "flu";
+    set("diseaseFocus", focus, diseaseMatch);
+  }
+
   // symptoms
   const syms: Sym[] = [];
   let firstSymMatch: RegExpMatchArray | null = null;
   for (const [s, rx] of SYM_RX) {
-    const m = t.match(rx);
+    const m = findAffirmedMatch(t, rx);
     if (m) {
       syms.push(s);
       firstSymMatch ??= m;
@@ -72,6 +95,13 @@ export function keywordExtract(text: string, today = todayISO()): Extraction {
     answers.symptoms = syms;
     evidence.symptoms = { quote: t.length > 80 ? t.slice(0, 80) + "…" : t, via: "text" };
   }
+
+  if ((m = t.match(/(?:ถ่าย|อุจจาระ|ท้องเสีย|ท้องร่วง).{0,12}(\d{1,2})\s*ครั้ง|\b(\d{1,2})\s*ครั้ง.{0,12}(?:ถ่าย|อุจจาระ)/))) {
+    set("stoolCount", Number(m[1] ?? m[2]), m);
+  }
+  if ((m = t.match(/(กิน|ทาน|รับประทาน).{0,15}(อาหาร|มื้อ).{0,12}(ร่วมกัน|เหมือนกัน|เดียวกัน)|กินอาหาร.{0,15}แล้ว.{0,15}(ท้องเสีย|อาเจียน)/))) {
+    set("sharedMeal", true, m);
+  } else if ((m = t.match(/ไม่ได้กิน.{0,10}(อาหาร|มื้อเดียวกัน)|ไม่มีใครกินร่วม/))) set("sharedMeal", false, m);
 
   const temp = t.match(/(?<!\d)(3[7-9]|4[0-2])([.,]\d)?(?!\d)(?!\s*(?:ปี|ขวบ|คน|วัน|เดือน|กก|กิโล))\s*(องศา|°|c\b)?/i);
   const afterAge = temp ? /อายุ\s*$/.test(t.slice(0, temp.index)) : false;
@@ -96,9 +126,9 @@ export function keywordExtract(text: string, today = todayISO()): Extraction {
   if (flags.length && flagM) set("redFlags", flags, flagM);
 
   // onset
-  let m: RegExpMatchArray | null;
-  if ((m = t.match(/เมื่อวานซืน/))) set("onsetDate", addDays(today, -2), m);
-  else if ((m = t.match(/เมื่อวาน/))) set("onsetDate", addDays(today, -1), m);
+  if ((m = t.match(/เมื่อวานซืน|วานซืน|(?:สอง|2)\s*วัน(?:ที่แล้ว|ก่อน)/))) set("onsetDate", addDays(today, -2), m);
+  else if ((m = t.match(/(?:สอง|2)\s*มื้อ(?:แล้ว|ก่อน|ที่แล้ว|มาแล้ว)?/))) set("onsetDate", addDays(today, -2), m);
+  else if ((m = t.match(/มื้อวาน(?:นี้)?|แต่วานนี้|วานนี้|เมื่อวาน(?:นี้)?/))) set("onsetDate", addDays(today, -1), m);
   else if ((m = t.match(/(\d{1,2})\s*วัน\s*(ที่แล้ว|ก่อน|แล้ว)/))) set("onsetDate", addDays(today, -parseInt(m[1])), m);
   else if ((m = t.match(/(เริ่ม|เป็น)[^ ]{0,6}วันนี้|ตั้งแต่เช้า|เมื่อเช้า/))) set("onsetDate", today, m);
   else if ((m = t.match(/(\d{1,2})\s*สัปดาห์\s*(ที่แล้ว|ก่อน)/))) set("onsetDate", addDays(today, -7 * parseInt(m[1])), m);

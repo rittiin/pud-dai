@@ -6,7 +6,7 @@ import type { AnswerKey, CaseRecord } from "@/lib/types";
 import { addDays, CLASS_LABEL, thaiDate, URGENCY_LABEL } from "@/lib/flu/rules";
 import { detectClusters, epiCurve, type Cluster } from "@/lib/surveillance";
 import { describe, FIELD_LABEL } from "@/lib/labels";
-import { CASE_DEFINITION } from "@/lib/flu/knowledge";
+import { CASE_DEFINITION, DISEASE_CATALOG } from "@/lib/flu/knowledge";
 import ShareQR from "./ShareQR";
 
 const URG_STYLE: Record<string, string> = {
@@ -83,12 +83,13 @@ export default function Dashboard() {
   }
 
   function exportCsv() {
-    const cols: AnswerKey[] = ["age", "sex", "province", "district", "onsetDate", "symptoms", "status", "redFlags", "chronic", "placeName", "sickContact", "poultry", "vaccinated", "test"];
-    const head = ["id", "reported", ...cols, "classification", "urgency", "review"];
+    const cols: AnswerKey[] = ["diseaseFocus", "age", "sex", "province", "district", "onsetDate", "symptoms", "status", "redFlags", "chronic", "placeName", "sickContact", "poultry", "vaccinated", "test"];
+    const head = ["id", "reported", ...cols, "surveillanceCode", "classification", "urgency", "review"];
     const rows = shown.map((c) => [
       c.id,
       c.createdAt.slice(0, 10),
       ...cols.map((k) => (k === "onsetDate" ? (c.answers.onsetDate ?? "") : describe(k, c.answers[k] as never))),
+      c.assessment.surveillanceCode ?? "—",
       CLASS_LABEL[c.assessment.classification],
       URGENCY_LABEL[c.assessment.urgency],
       c.review ?? "",
@@ -108,7 +109,7 @@ export default function Dashboard() {
             พด
           </Link>
           <div className="min-w-0 flex-1">
-            <div className="font-semibold leading-tight">ศูนย์เฝ้าระวัง · ไข้หวัดใหญ่</div>
+            <div className="font-semibold leading-tight">ศูนย์เฝ้าระวัง · โรคตามรายการเดโม</div>
             <div className="text-xs text-muted">
               ข้อมูล ณ {thaiDate(today)} · อัปเดตอัตโนมัติทุก 5 วินาที · ตัวสกัดข้อมูล: {ai ? `AI ${provider} + คำค้น` : "คำค้น (ยังไม่ได้ตั้ง API key)"}{readOnly ? " · โหมดสาธิต อ่านอย่างเดียว" : ""}
             </div>
@@ -200,7 +201,7 @@ export default function Dashboard() {
                   <div className="flex items-center gap-2">
                     <div className="min-w-0 flex-1 truncate font-medium">{c.place}</div>
                     <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${c.meetsOutbreak ? "bg-red-soft text-red" : "bg-bg text-ink-2"}`}>
-                      {c.maxIn7Days}/5
+                      {DISEASE_CATALOG[c.disease].label} · {c.disease === "flu" ? `${c.maxIn7Days}/5` : `${c.maxIn7Days} ราย`}
                     </span>
                   </div>
                   <div className="mt-1 h-1.5 rounded-full bg-bg">
@@ -237,7 +238,7 @@ export default function Dashboard() {
             <table className="w-full min-w-[900px] text-sm">
               <thead className="bg-bg text-left text-xs text-ink-2">
                 <tr>
-                  {["รหัส", "รับรายงาน", "อายุ/เพศ", "พื้นที่", "เริ่มป่วย", "อาการ", "สถานที่", "ประเภทผู้ป่วย", "ความเร่งด่วน", "ตรวจสอบ"].map((h) => (
+                  {["รหัส", "รับรายงาน", "โรคที่คัดกรอง", "รหัส 506", "อายุ/เพศ", "พื้นที่", "เริ่มป่วย", "อาการ", "สถานที่", "ประเภทผู้ป่วย", "ความเร่งด่วน", "ตรวจสอบ"].map((h) => (
                     <th key={h} className="px-3 py-2 font-medium">
                       {h}
                     </th>
@@ -252,6 +253,8 @@ export default function Dashboard() {
                       {!c.demo && <span className="ml-1 rounded bg-blue-soft px-1 text-[10px] text-blue">ใหม่</span>}
                     </td>
                     <td className="px-3 py-2 text-xs text-ink-2">{thaiDate(c.createdAt.slice(0, 10))}</td>
+                    <td className="px-3 py-2">{DISEASE_CATALOG[c.assessment.disease ?? c.answers.diseaseFocus ?? "flu"].label}</td>
+                    <td className="px-3 py-2 font-mono text-xs">{c.assessment.surveillanceCode ?? "—"}</td>
                     <td className="px-3 py-2">
                       {c.answers.age ?? "-"} {c.answers.sex === "M" ? "ช" : c.answers.sex === "F" ? "ญ" : ""}
                     </td>
@@ -385,9 +388,9 @@ function CaseDrawer({ c, onClose, onReview, readOnly }: { c: CaseRecord; onClose
             </div>
           )}
           <div className="rounded-xl border border-line p-3 text-sm">
-            <div className="font-medium">เหตุผลตามนิยามโรค</div>
+            <div className="font-medium">ผลคัดกรอง {DISEASE_CATALOG[c.assessment.disease ?? c.answers.diseaseFocus ?? "flu"].label} · รหัส {c.assessment.surveillanceCode ?? "—"}</div>
             <div className="mt-1 text-ink-2">{c.assessment.clinicalReason}</div>
-            <div className="mt-1 text-xs text-muted">{CASE_DEFINITION.clinical}</div>
+            <div className="mt-1 text-xs text-muted">{c.assessment.disease === "flu" ? CASE_DEFINITION.clinical : DISEASE_CATALOG[c.assessment.disease ?? c.answers.diseaseFocus ?? "flu"].clinical}</div>
           </div>
           <div>
             <div className="mb-2 text-sm font-medium">ข้อมูลรายช่อง และหลักฐานต้นทาง</div>

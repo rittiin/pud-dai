@@ -38,9 +38,9 @@ export default function CareFinder({
       : a.urgency === "urgent" || a.urgency === "soon"
         ? [HOSPITAL, CLINIC, PHARMACY]
         : a.urgency === "recovered"
-          ? [VACCINE, PHARMACY]
+          ? a.disease === "flu" ? [VACCINE, PHARMACY] : [PHARMACY]
           : [PHARMACY, CLINIC];
-  const showKit = sickNow && a.urgency !== "emergency" && !tested && a.meetsClinical;
+  const showKit = a.disease === "flu" && sickNow && a.urgency !== "emergency" && !tested && a.meetsClinical;
 
   return (
     <div className="space-y-3">
@@ -70,7 +70,7 @@ export default function CareFinder({
       </div>
 
       {showKit && <KitCard />}
-      {caseId && sickNow && a.urgency !== "emergency" && <ReportTest caseId={caseId} current={answers.test} onUpdated={onUpdated} />}
+      {a.disease === "flu" && caseId && sickNow && a.urgency !== "emergency" && <ReportTest caseId={caseId} current={answers.test} onUpdated={onUpdated} />}
     </div>
   );
 }

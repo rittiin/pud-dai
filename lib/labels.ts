@@ -21,6 +21,9 @@ export const FIELD_LABEL: Record<AnswerKey, string> = {
   hcw: "บุคลากรการแพทย์",
   vaccinated: "วัคซีนไข้หวัดใหญ่",
   test: "ผลตรวจ",
+  diseaseFocus: "โรคที่ต้องการคัดกรอง",
+  stoolCount: "จำนวนครั้งที่ถ่ายเหลวใน 24 ชั่วโมง",
+  sharedMeal: "รับประทานอาหารร่วมกันกับผู้ป่วย",
   province: "จังหวัด",
   district: "อำเภอ",
   phone: "เบอร์โทร",
@@ -28,7 +31,7 @@ export const FIELD_LABEL: Record<AnswerKey, string> = {
 
 const CONTACT = { household: "คนในบ้าน", school: "ที่โรงเรียน", work: "ที่ทำงาน", other: "ที่อื่น", none: "ไม่มี", unknown: "ไม่แน่ใจ" };
 const VACC = { yes_1y: "ฉีดภายใน 1 ปี", yes_old: "เคยฉีด นานกว่า 1 ปี", no: "ไม่เคยฉีด", unknown: "จำไม่ได้" };
-const TEST = { none: "ยังไม่ได้ตรวจ", rapid_pos_a: "ชุดตรวจเร็ว: Flu A", rapid_pos_b: "ชุดตรวจเร็ว: Flu B", pcr_pos: "RT-PCR บวก", neg: "ตรวจแล้วไม่พบเชื้อ" };
+const TEST = { none: "ยังไม่ได้ตรวจ", rapid_pos_a: "ชุดตรวจเร็ว: Flu A", rapid_pos_b: "ชุดตรวจเร็ว: Flu B", pcr_pos: "RT-PCR Flu บวก", neg: "ตรวจแล้วไม่พบเชื้อ" };
 const STATUS = { sick: "ยังป่วย", better: "ดีขึ้น", recovered: "หายแล้ว" };
 
 export function describe<K extends AnswerKey>(key: K, v: Answers[K]): string {
@@ -57,6 +60,12 @@ export function describe<K extends AnswerKey>(key: K, v: Answers[K]): string {
       return VACC[v as keyof typeof VACC];
     case "test":
       return TEST[v as keyof typeof TEST];
+    case "diseaseFocus":
+      return ({ flu: "ไข้หวัดใหญ่", acute_diarrhea: "อุจจาระร่วงเฉียบพลัน", food_poisoning: "อาหารเป็นพิษ", unknown: "ไม่แน่ใจ" } as const)[v as "flu" | "acute_diarrhea" | "food_poisoning" | "unknown"];
+    case "stoolCount":
+      return `${v} ครั้ง/24 ชม.`;
+    case "sharedMeal":
+      return v === null ? "ไม่แน่ใจ" : v ? "ใช่" : "ไม่ใช่";
     case "placeSickCount":
       return `${v} คนขึ้นไป`;
     default:
