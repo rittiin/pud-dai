@@ -54,7 +54,7 @@ async function api(method: string, body?: unknown) {
     symptoms: { quote: said, via: "text" }, feverTemp: { quote: "ไข้ 38.8", via: "text" },
     onsetDate: { quote: "เริ่มเมื่อวาน", via: "text" }, consent: { quote: "ยินยอม", via: "button" },
   };
-  const post = await api("POST", { answers: { ...base, test: "none" }, evidence, transcript });
+  const post = await api("POST", { answers: { ...base, test: "none" }, evidence, transcript, storeConsent: true });
   rec("S3-a ส่งรายงานแล้วบันทึกได้", post.stored === true && !!post.id, `id=${post.id} classification=${post.assessment?.classification}`);
 
   const { cases } = await api("GET");
@@ -72,7 +72,7 @@ async function api(method: string, body?: unknown) {
   const rv = await api("PATCH", { id: post.id, review: "verified" });
   rec("S3-f เจ้าหน้าที่กดยืนยันเคสได้", rv.case?.review === "verified", `review=${rv.case?.review}`);
 
-  const noConsent = await api("POST", { answers: { ...base, consent: false }, evidence, transcript });
+  const noConsent = await api("POST", { answers: { ...base, consent: true }, evidence, transcript, storeConsent: false });
   rec("S3-g ไม่ยินยอม → ไม่บันทึกเข้าระบบ", noConsent.stored === false, `stored=${noConsent.stored}`);
 
   const pass = results.filter((r) => r.ok).length;

@@ -6,7 +6,7 @@ import type { AnswerKey, CaseRecord } from "@/lib/types";
 import { addDays, CLASS_LABEL, thaiDate, URGENCY_LABEL } from "@/lib/flu/rules";
 import { detectClusters, epiCurve, type Cluster } from "@/lib/surveillance";
 import { describe, FIELD_LABEL } from "@/lib/labels";
-import { CASE_DEFINITION, DISEASE_CATALOG } from "@/lib/flu/knowledge";
+import { CASE_DEFINITION, DISEASE_CATALOG, OUTBREAK_RULE } from "@/lib/flu/knowledge";
 import ShareQR from "./ShareQR";
 
 const URG_STYLE: Record<string, string> = {
@@ -137,7 +137,7 @@ export default function Dashboard() {
                 <div key={c.key} className="flex flex-wrap items-center gap-3 rounded-xl border border-red/30 bg-red-soft px-4 py-3">
                   <span className="rounded-full bg-red px-2 py-0.5 text-xs font-bold text-white">เข้าเกณฑ์สอบสวนการระบาด</span>
                   <span className="text-sm">
-                    <b>{c.place}</b> พบผู้ป่วย {c.maxIn7Days} รายภายใน 7 วัน ({thaiDate(c.firstOnset)} – {thaiDate(c.lastOnset)})
+                    <b>{c.place}</b> พบผู้ป่วย {c.maxInWindow} รายภายใน {OUTBREAK_RULE[c.disease]?.days ?? 7} วัน ({thaiDate(c.firstOnset)} – {thaiDate(c.lastOnset)})
                   </span>
                   <button
                     onClick={() => draft(c)}
@@ -193,7 +193,7 @@ export default function Dashboard() {
           {/* Clusters */}
           <div className="rounded-2xl bg-surface p-4 shadow-sm">
             <h2 className="mb-1 font-semibold">กลุ่มก้อนตามสถานที่</h2>
-            <p className="mb-3 text-xs text-muted">เกณฑ์ 5.2: ผู้ป่วยสงสัย ≥ 5 รายใน 1 สัปดาห์ ในสถานที่เดียวกัน</p>
+            <p className="mb-3 text-xs text-muted">เกณฑ์ 5.2: ไข้หวัดใหญ่ ≥ 5 รายใน 7 วัน · อุจจาระร่วง ≥ 10 รายใน 2 วัน · อาหารเป็นพิษไม่มีเกณฑ์จำนวน</p>
             <div className="space-y-2">
               {clusters.length === 0 && <div className="text-sm text-muted">ยังไม่พบ</div>}
               {clusters.map((c) => (
@@ -201,11 +201,11 @@ export default function Dashboard() {
                   <div className="flex items-center gap-2">
                     <div className="min-w-0 flex-1 truncate font-medium">{c.place}</div>
                     <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${c.meetsOutbreak ? "bg-red-soft text-red" : "bg-bg text-ink-2"}`}>
-                      {DISEASE_CATALOG[c.disease].label} · {c.disease === "flu" ? `${c.maxIn7Days}/5` : `${c.maxIn7Days} ราย`}
+                      {DISEASE_CATALOG[c.disease].label} · {OUTBREAK_RULE[c.disease] ? `${c.maxInWindow}/${OUTBREAK_RULE[c.disease]!.min}` : `${c.maxIn7Days} ราย`}
                     </span>
                   </div>
                   <div className="mt-1 h-1.5 rounded-full bg-bg">
-                    <div className={`h-1.5 rounded-full ${c.meetsOutbreak ? "bg-red" : "bg-amber"}`} style={{ width: `${Math.min(100, (c.maxIn7Days / 5) * 100)}%` }} />
+                    <div className={`h-1.5 rounded-full ${c.meetsOutbreak ? "bg-red" : "bg-amber"}`} style={{ width: `${Math.min(100, (c.maxInWindow / (OUTBREAK_RULE[c.disease]?.min ?? 5)) * 100)}%` }} />
                   </div>
                   <div className="mt-1.5 text-xs text-muted">
                     อ.{c.district} จ.{c.province} · {c.cases.length} ราย · {thaiDate(c.firstOnset)}–{thaiDate(c.lastOnset)}

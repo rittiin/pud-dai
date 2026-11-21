@@ -1,6 +1,6 @@
 // Officer-side analytics. Everything here is plain code, so the numbers are reproducible.
 import type { CaseRecord, DiseaseFocus } from "./types";
-import { CASE_DEFINITION } from "./flu/knowledge";
+import { CASE_DEFINITION, OUTBREAK_RULE } from "./flu/knowledge";
 import { CLASS_LABEL, daysBetween, thaiDate } from "./flu/rules";
 import { describe } from "./labels";
 
@@ -14,6 +14,8 @@ export interface Cluster {
   firstOnset: string;
   lastOnset: string;
   maxIn7Days: number;
+  /** Most cases inside the disease's own outbreak window (7 d flu, 2 d diarrhoea). */
+  maxInWindow: number;
   meetsOutbreak: boolean;
 }
 
@@ -31,15 +33,22 @@ export function detectClusters(cases: CaseRecord[]): Cluster[] {
   const out: Cluster[] = [];
   for (const [key, list] of groups) {
     const sorted = [...list].sort((a, b) => a.answers.onsetDate!.localeCompare(b.answers.onsetDate!));
-    let max = 0;
-    for (let i = 0; i < sorted.length; i++) {
-      let j = i;
-      while (j + 1 < sorted.length && daysBetween(sorted[i].answers.onsetDate!, sorted[j + 1].answers.onsetDate!) <= 6) j++;
-      max = Math.max(max, j - i + 1);
-    }
+    const maxWithin = (days: number) => {
+      let best = 0;
+      for (let i = 0; i < sorted.length; i++) {
+        let j = i;
+        while (j + 1 < sorted.length && daysBetween(sorted[i].answers.onsetDate!, sorted[j + 1].answers.onsetDate!) <= days - 1) j++;
+        best = Math.max(best, j - i + 1);
+      }
+      return best;
+    };
+    const disease = key.split(":", 1)[0] as DiseaseFocus;
+    const rule = OUTBREAK_RULE[disease];
+    const max = maxWithin(7);
+    const inWindow = rule ? maxWithin(rule.days) : max;
     out.push({
       key,
-      disease: (key.split(":", 1)[0] as DiseaseFocus),
+      disease,
       place: sorted[0].answers.placeName!,
       province: sorted[0].answers.province,
       district: sorted[0].answers.district,
@@ -47,8 +56,9 @@ export function detectClusters(cases: CaseRecord[]): Cluster[] {
       firstOnset: sorted[0].answers.onsetDate!,
       lastOnset: sorted[sorted.length - 1].answers.onsetDate!,
       maxIn7Days: max,
-      // The 5-in-7-days outbreak threshold in the cited case definition is influenza-specific.
-      meetsOutbreak: key.startsWith("flu:") && max >= 5,
+      maxInWindow: inWindow,
+      // Thresholds are disease-specific (DDC section 5.2); food poisoning has no numeric one.
+      meetsOutbreak: rule !== undefined && inWindow >= rule.min,
     });
   }
   return out.sort((a, b) => b.maxIn7Days - a.maxIn7Days);
@@ -89,7 +99,11 @@ export function clusterFacts(cl: Cluster, today: string): string {
     `วันที่จัดทำ: ${thaiDate(today)}`,
     `สถานที่: ${cl.place} อ.${cl.district ?? "-"} จ.${cl.province ?? "-"}`,
     `จำนวนผู้ป่วยที่รายงานผ่านพูดได้: ${cs.length} ราย (${byClass})`,
-    `ผู้ป่วยสูงสุดใน 7 วัน: ${cl.maxIn7Days} ราย ${cl.disease === "flu" ? `${cl.meetsOutbreak ? "→ เข้าเกณฑ์สอบสวนการระบาด" : "→ ยังไม่เข้าเกณฑ์สอบสวนการระบาด"} (${CASE_DEFINITION.outbreak})` : "(เป็นสัญญาณเฝ้าระวัง ยังไม่ใช่เกณฑ์ยืนยันการระบาด)"}`,
+    (() => {
+      const rule = OUTBREAK_RULE[cl.disease];
+      if (!rule) return `ผู้ป่วยสูงสุดใน 7 วัน: ${cl.maxIn7Days} ราย (โรคนี้ไม่มีเกณฑ์จำนวนในนิยาม เป็นสัญญาณให้เจ้าหน้าที่พิจารณาสอบสวน)`;
+      return `ผู้ป่วยสูงสุดใน ${rule.days} วัน: ${cl.maxInWindow} ราย ${cl.meetsOutbreak ? "→ เข้าเกณฑ์สอบสวนการระบาด" : "→ ยังไม่เข้าเกณฑ์สอบสวนการระบาด"} (เกณฑ์: ${rule.text})`;
+    })(),
     `วันเริ่มป่วยรายแรก: ${thaiDate(cl.firstOnset)} รายล่าสุด: ${thaiDate(cl.lastOnset)}`,
     `อายุ: ${ages.length ? `${ages[0]}–${ages[ages.length - 1]} ปี (มัธยฐาน ${ages[Math.floor(ages.length / 2)]} ปี)` : "ไม่มีข้อมูล"} · ชาย ${male} หญิง ${cs.length - male}`,
     cl.disease === "flu"
@@ -118,7 +132,11 @@ ${f
   .join("\n")}
 
 ### การประเมินความเสี่ยง
-- ${cl.disease === "flu" ? (cl.meetsOutbreak ? "พบผู้ป่วยสงสัยตั้งแต่ 5 รายขึ้นไปภายใน 1 สัปดาห์ในสถานที่เดียวกัน **เข้าเกณฑ์สอบสวนการระบาด** ตามนิยามไข้หวัดใหญ่" : "ยังไม่ถึงเกณฑ์ไข้หวัดใหญ่ 5 รายใน 1 สัปดาห์ ให้เฝ้าระวังต่อเนื่อง") : "ข้อมูลกลุ่มนี้เป็นเพียงสัญญาณเฝ้าระวัง ไม่ใช้เกณฑ์ไข้หวัดใหญ่แทนเกณฑ์ของโรคนี้"}
+- ${(() => {
+  const rule = OUTBREAK_RULE[cl.disease];
+  if (!rule) return "โรคนี้ไม่มีเกณฑ์จำนวนผู้ป่วยในนิยาม ให้เจ้าหน้าที่พิจารณาสอบสวนจากประวัติการกินอาหารร่วมกัน";
+  return cl.meetsOutbreak ? `พบ${rule.text.replace("ผู้ป่วยสงสัย", "ผู้ป่วยสงสัย ")} **เข้าเกณฑ์สอบสวนการระบาด**` : `ยังไม่ถึงเกณฑ์ (${rule.text}) ให้เฝ้าระวังต่อเนื่อง`;
+})()}
 
 ### ข้อเสนอแนะการควบคุมโรค (ให้เจ้าหน้าที่พิจารณา)
 1. ${advice}

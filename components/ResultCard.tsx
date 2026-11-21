@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { Answers, Assessment } from "@/lib/types";
-import { ADVICE, CASE_DEFINITION, DISEASE_CATALOG, DISEASE_SOURCES, RED_FLAG_LABEL, SOURCES } from "@/lib/flu/knowledge";
+import { ADVICE, CASE_DEFINITION, DISEASE_CATALOG, DISEASE_SOURCES, GI_FLAGS, RED_FLAG_LABEL, RESP_FLAGS, SOURCES } from "@/lib/flu/knowledge";
 import { CLASS_LABEL, thaiDate, todayISO } from "@/lib/flu/rules";
 import Mascot, { type Mood } from "./Mascot";
 import CareFinder from "./CareFinder";
@@ -47,7 +47,11 @@ function headline(a: Assessment, ans: Answers): { title: string; body: string } 
     case "soon":
       return {
         title: "ควรไปพบแพทย์ภายใน 24 ชั่วโมง",
-        body: "อาการของคุณไม่ดีขึ้นตามที่ควรเป็น ควรให้แพทย์ตรวจว่ามีภาวะแทรกซ้อน เช่น ปอดอักเสบ หรือไม่",
+        body: (ans.symptoms ?? []).includes("bloody_stool")
+          ? "ถ่ายเป็นมูกเลือดอาจเกิดจากเชื้อแบคทีเรียที่ต้องให้แพทย์ตรวจ อย่าซื้อยาหยุดถ่ายกินเอง ระหว่างนี้จิบ ORS บ่อย ๆ"
+          : hasGiSymptoms && !(ans.symptoms ?? []).includes("cough")
+            ? `${a.highRisk.length ? `ผู้ป่วยอยู่ในกลุ่มที่ขาดน้ำได้ง่าย (${a.highRisk.join(", ")}) ` : ""}ควรให้แพทย์ประเมินภาวะขาดน้ำ ระหว่างนี้จิบ ORS บ่อย ๆ`
+            : "อาการของคุณไม่ดีขึ้นตามที่ควรเป็น ควรให้แพทย์ตรวจว่ามีภาวะแทรกซ้อน เช่น ปอดอักเสบ หรือไม่",
       };
     case "recovered":
       return {
@@ -111,13 +115,16 @@ export default function ResultCard({
   const isolating = a.disease === "flu" && a.urgency !== "recovered" && a.contagiousUntil && a.contagiousUntil >= today;
   const giSymptoms = (answers.symptoms ?? []).some((s) => ["diarrhea", "vomiting", "abdominal_pain", "bloody_stool"].includes(s));
   const gastrointestinal = a.disease === "acute_diarrhea" || a.disease === "food_poisoning" || giSymptoms;
+  const giCare = a.disease === "food_poisoning" ? ADVICE.foodPoisoningSelfCare : ADVICE.diarrheaSelfCare;
   const selfCare = gastrointestinal && a.disease === "flu"
-    ? [...ADVICE.selfCare, ...ADVICE.giSelfCare]
+    ? [...ADVICE.selfCare, ...ADVICE.diarrheaSelfCare.slice(0, 1)]
     : gastrointestinal
-      ? ADVICE.giSelfCare
+      ? giCare
       : a.disease === "flu"
         ? ADVICE.selfCare
         : ADVICE.selfCare.filter((item) => !item.includes("ไข้หวัดใหญ่"));
+  const respiratory = (answers.symptoms ?? []).some((s) => ["fever", "cough", "sore_throat", "runny_nose", "sputum"].includes(s));
+  const warnFlags = gastrointestinal && !respiratory ? GI_FLAGS : gastrointestinal ? [...new Set([...RESP_FLAGS, ...GI_FLAGS])] : RESP_FLAGS;
 
   const sections: { id: string; title: string; items: string[] }[] = [
     ...(a.urgency === "recovered"
@@ -129,7 +136,7 @@ export default function ResultCard({
     {
       id: "warn",
       title: "ไปโรงพยาบาลทันทีถ้ามีอาการเหล่านี้",
-      items: Object.values(RED_FLAG_LABEL),
+      items: warnFlags.map((f) => RED_FLAG_LABEL[f]),
     },
           ...(a.disease === "flu" ? [{ id: "vaccine", title: "วัคซีนไข้หวัดใหญ่", items: ADVICE.vaccine }] : []),
   ];

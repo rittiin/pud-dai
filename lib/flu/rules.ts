@@ -43,9 +43,10 @@ export function clinicalCriteria(a: Answers): { meets: boolean; reason: string }
     return { meets, reason: `ถ่ายเหลว ${a.stoolCount === undefined ? "ยังไม่ทราบจำนวน" : `${a.stoolCount} ครั้ง/24 ชม.`} · ถ่ายมูกเลือด ${s.includes("bloody_stool") ? "มี" : "ไม่มี/ไม่ระบุ"}` };
   }
   if (focus === "food_poisoning") {
-    const hasGiSymptom = s.some((x) => ["diarrhea", "vomiting", "abdominal_pain"].includes(x));
-    const meets = hasGiSymptom && a.sharedMeal === true;
-    return { meets, reason: `อาการทางเดินอาหาร ${hasGiSymptom ? "มี" : "ไม่มี/ไม่ระบุ"} · รับประทานอาหารร่วมกับผู้ป่วยอื่น ${a.sharedMeal === true ? "ใช่" : a.sharedMeal === false ? "ไม่ใช่" : "ยังไม่ทราบ"} · ต้องให้เจ้าหน้าที่สอบสวน` };
+    // DDC: nausea, vomiting, abdominal pain (diarrhoea optional) + history of suspect food.
+    const hasCore = s.includes("vomiting") || s.includes("abdominal_pain");
+    const meets = hasCore && a.sharedMeal === true;
+    return { meets, reason: `อาเจียนหรือปวดท้อง ${hasCore ? "มี" : "ไม่มี/ไม่ระบุ"} · กินอาหารที่สงสัยปนเปื้อน ${a.sharedMeal === true ? "ใช่" : a.sharedMeal === false ? "ไม่ใช่" : "ยังไม่ทราบ"} · ต้องให้เจ้าหน้าที่สอบสวน` };
   }
   const hasFever = s.includes("fever");
   const hasCough = s.includes("cough");
@@ -69,18 +70,19 @@ export function highRiskReasons(a: Answers): string[] {
 }
 
 export function assess(a: Answers, today = todayISO()): Assessment {
-  const { meets, reason } = clinicalCriteria(a);
   const focus = a.diseaseFocus ?? "flu";
   const test = a.test ?? "none";
   const testDisease: DiseaseFocus | undefined = ["pcr_pos", "rapid_pos_a", "rapid_pos_b"].includes(test) ? "flu" : undefined;
   const disease: DiseaseFocus = focus === "unknown" && testDisease ? testDisease : focus;
+  // A positive test never replaces the clinical criteria: every DDC class requires them.
+  const { meets, reason } = clinicalCriteria({ ...a, diseaseFocus: disease });
   const highRisk = highRiskReasons(a);
   const s = a.symptoms ?? [];
   const flags = a.redFlags ?? [];
   const respiratory = s.includes("fever") || s.includes("cough");
 
   let classification: Classification = "not_case";
-  if (meets || testDisease === disease) {
+  if (meets) {
     const matchingPositive = disease === "flu" && ["pcr_pos", "rapid_pos_a", "rapid_pos_b"].includes(test);
     const confirmatory = test === "pcr_pos";
     if (matchingPositive && confirmatory) classification = "confirmed";
@@ -94,6 +96,8 @@ export function assess(a: Answers, today = todayISO()): Assessment {
   else if (a.poultry && respiratory) urgency = "urgent";
   else if (highRisk.length && respiratory) urgency = "urgent";
   else if (flags.length) urgency = "soon";
+  // Bloody stool, or diarrhoea/vomiting in a high-risk person, needs a doctor within 24 h.
+  else if (s.includes("bloody_stool") || (highRisk.length && s.some((x) => ["diarrhea", "vomiting"].includes(x)))) urgency = "soon";
 
   const alerts: Alert[] = [];
   if (urgency === "emergency")

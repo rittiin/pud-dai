@@ -77,8 +77,8 @@ export const QUESTIONS: Question[] = [
   {
     key: "sharedMeal",
     kind: "single",
-    formRef: "ประวัติรับประทานอาหารร่วมกัน",
-    prompt: () => "ก่อนเริ่มป่วย ได้รับประทานอาหารมื้อเดียวกันกับคนอื่นที่มีอาการคล้ายกันไหมครับ?",
+    formRef: "ประวัติรับประทานอาหารที่สงสัยปนเปื้อน",
+    prompt: () => "ก่อนเริ่มป่วยไม่นาน (ไม่กี่ชั่วโมงถึง 2 วัน) ได้กินอาหารที่สงสัยว่าไม่สะอาด ค้างคืน หรือกินมื้อเดียวกับคนที่ป่วยคล้ายกันไหมครับ?",
     options: [{ label: "ใช่", value: true }, { label: "ไม่ใช่", value: false }, { label: "ไม่แน่ใจ", value: null }],
     ask: (a) => sick(a) && (a.diseaseFocus === "food_poisoning" || a.diseaseFocus === "unknown") && (a.symptoms ?? []).some((s) => ["diarrhea", "vomiting", "abdominal_pain"].includes(s)),
   },

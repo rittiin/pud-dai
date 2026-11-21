@@ -53,8 +53,14 @@ if (pass !== CASES.length) process.exitCode = 1;
 const diseaseCases: { name: string; answers: Answers; code: string; classification: string }[] = [
   { name: "influenza uses code 506 15", answers: { diseaseFocus: "flu", symptoms: ["fever", "cough", "myalgia"] }, code: "506 15", classification: "suspected" },
   { name: "acute diarrhea requires three stools or bloody stool", answers: { diseaseFocus: "acute_diarrhea", symptoms: ["diarrhea"], stoolCount: 3 }, code: "506 02", classification: "suspected" },
-  { name: "food poisoning screen with shared meal", answers: { diseaseFocus: "food_poisoning", symptoms: ["diarrhea"], sharedMeal: true }, code: "506 03", classification: "suspected" },
-  { name: "food poisoning not classified without shared meal", answers: { diseaseFocus: "food_poisoning", symptoms: ["diarrhea"], sharedMeal: null }, code: "506 03", classification: "not_case" },
+  { name: "acute diarrhea: two stools is not enough", answers: { diseaseFocus: "acute_diarrhea", symptoms: ["diarrhea"], stoolCount: 2 }, code: "506 02", classification: "not_case" },
+  { name: "acute diarrhea: one bloody stool is enough", answers: { diseaseFocus: "acute_diarrhea", symptoms: ["bloody_stool"] }, code: "506 02", classification: "suspected" },
+  { name: "food poisoning: vomiting/abdominal pain + suspect food", answers: { diseaseFocus: "food_poisoning", symptoms: ["vomiting", "abdominal_pain"], sharedMeal: true }, code: "506 03", classification: "suspected" },
+  { name: "food poisoning: diarrhoea alone does not meet DDC clinical criteria", answers: { diseaseFocus: "food_poisoning", symptoms: ["diarrhea"], sharedMeal: true }, code: "506 03", classification: "not_case" },
+  { name: "food poisoning not classified without suspect-food history", answers: { diseaseFocus: "food_poisoning", symptoms: ["vomiting"], sharedMeal: null }, code: "506 03", classification: "not_case" },
+  { name: "influenza: positive ATK without clinical criteria is not a case", answers: { diseaseFocus: "flu", symptoms: ["runny_nose"], test: "rapid_pos_a" }, code: "506 15", classification: "not_case" },
+  { name: "influenza: clinical criteria + positive ATK is probable", answers: { diseaseFocus: "flu", symptoms: ["fever", "cough", "headache"], test: "rapid_pos_a" }, code: "506 15", classification: "probable" },
+  { name: "influenza: clinical criteria + RT-PCR is confirmed", answers: { diseaseFocus: "flu", symptoms: ["fever", "cough", "fatigue"], test: "pcr_pos" }, code: "506 15", classification: "confirmed" },
 ];
 let diseasePass = 0;
 for (const scenario of diseaseCases) {

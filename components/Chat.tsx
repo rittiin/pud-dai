@@ -86,7 +86,7 @@ function speakOnDevice(text: string) {
 
 type ConsentChoices = { processing: boolean; store: boolean; ai: boolean; openAiVoice: boolean; microphone: boolean };
 
-export default function Chat({ publicDemo, openAiVoiceAvailable }: { publicDemo: boolean; openAiVoiceAvailable: boolean }) {
+export default function Chat({ publicDemo, openAiVoiceAvailable, aiAvailable }: { publicDemo: boolean; openAiVoiceAvailable: boolean; aiAvailable: boolean }) {
   const [answers, setAnswers] = useState<Answers>({});
   const [evidence, setEvidence] = useState<Evidence>({});
   const [msgs, setMsgs] = useState<Msg[]>([]);
@@ -389,7 +389,7 @@ export default function Chat({ publicDemo, openAiVoiceAvailable }: { publicDemo:
   const prog = progress(answers);
   const showInput = stage === "free" || stage === "clarify_term" || stage === "clarify_meaning" || (stage === "qa" && q);
 
-  if (stage === "welcome") return <Welcome onStart={start} big={big} setBig={setBig} publicDemo={publicDemo} openAiVoiceAvailable={openAiVoiceAvailable} />;
+  if (stage === "welcome") return <Welcome onStart={start} big={big} setBig={setBig} publicDemo={publicDemo} openAiVoiceAvailable={openAiVoiceAvailable} aiAvailable={aiAvailable} />;
 
   return (
     <div className="mx-auto flex h-dvh max-w-xl flex-col bg-bg">
@@ -591,12 +591,14 @@ function Welcome({
   setBig,
   publicDemo,
   openAiVoiceAvailable,
+  aiAvailable,
 }: {
   onStart: (choices: ConsentChoices) => void;
   big: boolean;
   setBig: (b: boolean) => void;
   publicDemo: boolean;
   openAiVoiceAvailable: boolean;
+  aiAvailable: boolean;
 }) {
   const [processing, setProcessing] = useState(false);
   const [store, setStore] = useState(false);
@@ -633,22 +635,22 @@ function Welcome({
         </ul>
       </div>
       <div className="space-y-2.5 rounded-2xl bg-surface p-3 shadow-sm">
-        <div className="text-left text-sm font-semibold">ก่อนเริ่ม: เลือกสิ่งที่ยินยอม</div>
+        <div className="text-left text-sm font-semibold">ก่อนเริ่ม: เลือกสิ่งที่ยินยอม (ตัวเลือกเสริมไม่บังคับ)</div>
         <p className="text-left text-xs leading-relaxed text-ink-2">
-          ต้นแบบนี้ไม่ใช่บริการของหน่วยงานจริง ข้อมูลอาการเป็นข้อมูลสุขภาพ โปรดใช้ข้อมูลสมมติเท่านั้น หากจะใช้กับผู้ป่วยจริง ผู้ดูแลต้องระบุผู้ควบคุมข้อมูล ช่องทางติดต่อ วัตถุประสงค์ และระยะเวลาเก็บให้ชัดก่อน
+          ต้นแบบเพื่อสาธิต ไม่ใช่บริการจริง โปรดใช้ข้อมูลสมมติ
         </p>
-        <ConsentCheck checked={processing} onChange={setProcessing} title="จำเป็น: ประมวลผลคำตอบเพื่อสร้างผลคัดกรอง" detail="ระบบรับคำตอบไปคำนวณผลและแสดงคำแนะนำ โดยไม่ถือว่าอนุญาตให้บันทึกหรือส่งให้ AI ภายนอก" />
-        <ConsentCheck checked={store} onChange={setStore} disabled={publicDemo} title="ตัวเลือก: บันทึกข้อมูลในแดชบอร์ด" detail={publicDemo ? "ปิดอยู่ในเว็บเดโมสาธารณะ ซึ่งไม่บันทึกรายงาน" : "บันทึกคำตอบ หลักฐานข้อความ และบทสนทนาไว้ใน data/cases.json ของเซิร์ฟเวอร์โครงการ"} />
-        <ConsentCheck checked={ai} onChange={setAi} disabled={publicDemo} title="ตัวเลือก: ส่งข้อความอาการให้ AI ภายนอกช่วยแยกข้อมูลและร่างรายงาน" detail={publicDemo ? "ปิดในเว็บเดโมสาธารณะ ระบบใช้การจับคำแบบออฟไลน์" : "เมื่อไม่เลือก ระบบใช้การจับคำแบบออฟไลน์ ข้อความและข้อมูลสรุปจะไปยังผู้ให้บริการ AI ตามการตั้งค่าเซิร์ฟเวอร์"} />
+        <ConsentCheck checked={processing} onChange={setProcessing} title="จำเป็น: ใช้คำตอบคำนวณผลคัดกรอง" detail="ไม่รวมการบันทึกหรือส่งให้ AI" />
+        <ConsentCheck checked={store} onChange={setStore} disabled={publicDemo} title="บันทึกรายงานให้เจ้าหน้าที่" detail={publicDemo ? "ปิดในเว็บเดโม" : "เก็บคำตอบและบทสนทนาไว้บนแดชบอร์ด"} />
+        <ConsentCheck checked={ai} onChange={setAi} disabled={!aiAvailable} title="ให้ AI ช่วยอ่านอาการ" detail={aiAvailable ? "ส่งข้อความอาการไปยังผู้ให้บริการ AI ถ้าไม่เลือกจะใช้การจับคำออฟไลน์" : "ยังไม่พร้อม ใช้การจับคำออฟไลน์แทน"} />
         <ConsentCheck
           checked={openAiVoice}
           onChange={setOpenAiVoice}
           disabled={!openAiVoiceAvailable}
-          title="ตัวเลือก: ใช้เสียง AI จาก OpenAI อ่านคำถามและทวนสิ่งที่เข้าใจ"
-          detail={openAiVoiceAvailable ? "เมื่อกดปุ่มเสียง ระบบจะส่งเฉพาะข้อความที่ขอให้อ่านไปยัง OpenAI API เพื่อสร้างเสียง AI ไม่ใช่เสียงมนุษย์" : "ปิดในเว็บเดโมสาธารณะหรือเมื่อเซิร์ฟเวอร์ยังไม่มี OPENAI_API_KEY; ใช้เสียงจากอุปกรณ์แทนได้"}
+          title="ให้เสียง AI อ่านคำถาม"
+          detail={openAiVoiceAvailable ? "ส่งเฉพาะข้อความที่กดอ่านไปยัง OpenAI" : "ยังไม่พร้อม ใช้เสียงจากเครื่องแทนได้"}
         />
-        <ConsentCheck checked={microphone} onChange={setMicrophone} title="ตัวเลือก: ใช้ไมโครโฟนแปลงเสียงเป็นข้อความ" detail="จะไม่เริ่มฟังจนกว่าคุณกดยอมรับด้านล่างและกดปุ่มไมค์เอง เสียงอาจถูกประมวลผลโดยเบราว์เซอร์หรือผู้ให้บริการของเบราว์เซอร์" />
-        {publicDemo && <p className="rounded-lg bg-blue-soft px-3 py-2 text-xs leading-relaxed text-ink-2">เว็บเดโมนี้ไม่บันทึกคำตอบและปิด AI วิเคราะห์อาการ ใช้ข้อมูลสมมติเท่านั้น · เสียง OpenAI จะส่งเฉพาะข้อความที่กดอ่านเมื่อยินยอม</p>}
+        <ConsentCheck checked={microphone} onChange={setMicrophone} title="พูดผ่านไมโครโฟน" detail="ฟังเฉพาะตอนกดปุ่มไมค์ เบราว์เซอร์เป็นผู้แปลงเสียง" />
+        {publicDemo && <p className="rounded-lg bg-blue-soft px-3 py-2 text-xs leading-relaxed text-ink-2">เว็บเดโมไม่บันทึกคำตอบ</p>}
         <button onClick={() => begin(true)} disabled={!processing} className="press w-full rounded-2xl bg-brand py-3.5 text-lg font-semibold text-white shadow-md shadow-brand/20 disabled:cursor-not-allowed disabled:opacity-40">
           ยินยอมและเริ่มประเมิน
         </button>
