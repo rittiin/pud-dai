@@ -4,41 +4,27 @@ import type { Answers, Evidence } from "./types";
 import type { Extraction } from "./extract";
 import { AI_ALLOWED } from "./demo";
 
-type ProviderConfig = { id: string; label: string; apiKey: string; baseURL?: string; model: string; jsonMode?: boolean };
-
-/** Select exactly one OpenAI-compatible provider; never fan out health text to several APIs. */
-function selectProvider(): ProviderConfig | null {
-  if (!AI_ALLOWED) return null;
-  const choice = process.env.AI_PROVIDER?.toLowerCase();
-  if (choice === "typhoon") return process.env.TYPHOON_API_KEY ? { id: "typhoon", label: "Typhoon", apiKey: process.env.TYPHOON_API_KEY, baseURL: "https://api.opentyphoon.ai/v1", model: process.env.TYPHOON_MODEL || "typhoon-v2.5-30b-a3b-instruct" } : null;
-  if (choice === "openai") return process.env.OPENAI_API_KEY ? { id: "openai", label: "OpenAI", apiKey: process.env.OPENAI_API_KEY, model: process.env.OPENAI_MODEL || "gpt-5-mini", jsonMode: true } : null;
-  if (choice === "custom") return process.env.AI_API_KEY && process.env.AI_BASE_URL ? { id: "custom", label: "OpenAI-compatible API", apiKey: process.env.AI_API_KEY, baseURL: process.env.AI_BASE_URL, model: process.env.AI_MODEL || "default" } : null;
-  if (process.env.TYPHOON_API_KEY) return { id: "typhoon", label: "Typhoon", apiKey: process.env.TYPHOON_API_KEY, baseURL: "https://api.opentyphoon.ai/v1", model: process.env.TYPHOON_MODEL || "typhoon-v2.5-30b-a3b-instruct" };
-  if (process.env.OPENAI_API_KEY) return { id: "openai", label: "OpenAI", apiKey: process.env.OPENAI_API_KEY, model: process.env.OPENAI_MODEL || "gpt-5-mini", jsonMode: true };
-  if (process.env.AI_API_KEY && process.env.AI_BASE_URL) return { id: "custom", label: "OpenAI-compatible API", apiKey: process.env.AI_API_KEY, baseURL: process.env.AI_BASE_URL, model: process.env.AI_MODEL || "default" };
-  return null;
-}
-
-const PROVIDER = selectProvider();
+const MODEL = process.env.OPENAI_MODEL || "gpt-6-luna";
+const OPENAI_ENABLED = AI_ALLOWED && Boolean(process.env.OPENAI_API_KEY);
 
 export function aiEnabled(): boolean {
-  return PROVIDER !== null;
+  return OPENAI_ENABLED;
 }
 
 export function aiProvider(): string {
-  return PROVIDER ? `${PROVIDER.label} (${PROVIDER.model})` : "ไม่ได้เปิดใช้ API ภายนอก";
+  return OPENAI_ENABLED ? `OpenAI (${MODEL})` : "ไม่ได้เปิดใช้ OpenAI API";
 }
 
 function client() {
-  if (!PROVIDER) throw new Error("No AI provider configured");
-  return new OpenAI({ apiKey: PROVIDER.apiKey, baseURL: PROVIDER.baseURL });
+  if (!OPENAI_ENABLED || !process.env.OPENAI_API_KEY) throw new Error("OpenAI API is not enabled");
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 }
 
 function requestOptions(json: boolean) {
-  const jsonFormat = json && PROVIDER?.jsonMode ? { response_format: { type: "json_object" as const } } : {};
-  // OpenAI reasoning models (gpt-5*, o*) reject max_tokens and custom temperature.
-  if (PROVIDER?.id === "openai" && /^(gpt-5|o\d)/.test(PROVIDER.model)) {
-    return { max_completion_tokens: 4096, reasoning_effort: "minimal" as const, ...jsonFormat };
+  const jsonFormat = json ? { response_format: { type: "json_object" as const } } : {};
+  // GPT-5/6 reasoning models use max_completion_tokens; GPT-6 Luna supports none reasoning effort.
+  if (/^(gpt-5|gpt-6|o\d)/.test(MODEL)) {
+    return { max_completion_tokens: 4096, reasoning_effort: MODEL.startsWith("gpt-6") ? "none" as const : "minimal" as const, ...jsonFormat };
   }
   return { max_tokens: 2048, temperature: json ? 0.1 : 0.4, ...jsonFormat };
 }
@@ -111,7 +97,7 @@ const norm = (s: string) => s.replace(/\s+/g, "").replace(/ํา/g, "ำ");
 /** AI extraction with a grounding check: any field whose quote is not literally in the user's text is dropped. */
 export async function aiExtract(text: string, today: string, context?: string): Promise<Extraction & { dropped: string[] }> {
   const res = await client().chat.completions.create({
-    model: PROVIDER!.model,
+    model: MODEL,
     ...requestOptions(true),
     messages: [
       { role: "system", content: EXTRACT_SYSTEM },
@@ -150,7 +136,7 @@ export async function aiExtract(text: string, today: string, context?: string): 
 
 export async function aiReport(facts: string): Promise<string> {
   const res = await client().chat.completions.create({
-    model: PROVIDER!.model,
+    model: MODEL,
     ...requestOptions(false),
     messages: [
       {

@@ -1,5 +1,5 @@
 // Turns free Thai text ("ไข้ 39 ไอ ปวดตัว เริ่มเมื่อวาน ที่โรงเรียนเป็นหลายคน") into structured answers.
-// Keyword mode works offline; AI mode (lib/ai.ts) uses the configured OpenAI or Typhoon provider.
+// Keyword mode works offline; AI mode (lib/ai.ts) uses OpenAI when enabled.
 // Both modes must return a verbatim quote as evidence for every field.
 import type { Answers, Chronic, Evidence, RedFlag, Sym } from "./types";
 import { addDays, todayISO } from "./flu/rules";

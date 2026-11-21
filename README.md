@@ -29,18 +29,10 @@ npm run dev
 
 ```env
 OPENAI_API_KEY=
-# OPENAI_MODEL=gpt-5-mini
-
-# ใช้ผู้ให้บริการครั้งละหนึ่งราย; ถ้ามี Typhoon key จะเลือก Typhoon เป็นค่าเริ่มต้น
-# TYPHOON_API_KEY=
-# TYPHOON_MODEL=typhoon-v2.5-30b-a3b-instruct
-# AI_PROVIDER=typhoon | openai | custom
-# AI_BASE_URL=  # ใช้เมื่อ AI_PROVIDER=custom
-# AI_API_KEY=   # ใช้เมื่อ AI_PROVIDER=custom
-# AI_MODEL=     # ใช้เมื่อ AI_PROVIDER=custom
+# OPENAI_MODEL=gpt-6-luna
 ```
 
-แต่ละคำขอส่งข้อความสุขภาพไปยังผู้ให้บริการที่เลือกเพียงรายเดียว ห้ามใช้ prefix `NEXT_PUBLIC_` และห้าม commit `.env.local` ไฟล์นี้ถูก `.gitignore` กันไว้
+ข้อความสุขภาพที่ผู้ใช้ยินยอมให้ AI วิเคราะห์จะส่งไปยัง OpenAI เท่านั้น ห้ามใช้ prefix `NEXT_PUBLIC_` และห้าม commit `.env.local` ไฟล์นี้ถูก `.gitignore` กันไว้
 
 เสียงอ่านสร้างผ่าน `/api/speech` ฝั่งเซิร์ฟเวอร์และจะเรียก OpenAI ต่อเมื่อผู้ใช้เลือกยินยอมก่อนเริ่มและกดปุ่มเสียงเท่านั้น API key ไม่ถูกส่งไปยังเบราว์เซอร์ รุ่น `gpt-4o-mini-tts` ที่ใช้อยู่ในตัวอย่างมีกำหนดปิดวันที่ 6 มกราคม 2027; ก่อนวันดังกล่าวต้องย้ายไปใช้แนวทาง Realtime API ตามเอกสาร OpenAI
 
